@@ -1,0 +1,13 @@
+# Only addon source and public project files are versioned.
+/*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/SimpleNotepad*.toc
+!/Appearance.lua
+!/Notebook.lua
+!/Localization.lua
+!/Platform.lua
+!/Window.lua
+!/Startup.lua
+!/bindings.xml

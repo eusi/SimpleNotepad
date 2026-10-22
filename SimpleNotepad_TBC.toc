@@ -1,0 +1,15 @@
+## Interface: 20506
+## Title: SimpleNotepad
+## Author: sAks
+## Notes: A simple in-game notepad for World of Warcraft.
+## Version: 0.1.0
+## SavedVariables: SimpleNotepad_DB
+## IconTexture: Interface\Icons\INV_Misc_Note_01
+
+Localization.lua
+Platform.lua
+Notebook.lua
+Appearance.lua
+Window.lua
+Startup.lua
+bindings.xml
