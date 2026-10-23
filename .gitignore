@@ -10,4 +10,6 @@
 !/Platform.lua
 !/Window.lua
 !/Startup.lua
-!/bindings.xml
+!/Bindings.xml
+!/Media/
+!/Media/*.tga

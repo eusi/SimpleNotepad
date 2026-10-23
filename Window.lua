@@ -2,21 +2,30 @@ local _, app = ...
 local L = app.L
 local book, skin = app.journal, app.skin
 local view = {mode = "note", tabButtons = {}, rows = {}, headerProgress = 1, fade = 1}
+local HEADER_HEIGHT, TAB_HEIGHT, MIN_HEIGHT = 28, 22, 96
 
 local function strip(text) return text:match("^%s*(.-)%s*$") end
 local function show(frame, visible) frame:SetShown(visible) end
 
+-- Note actions and tab navigation.
 function view:CloseSearch()
     self.search:ClearFocus(); self.searchPanel:Hide()
+    self.searchState=nil
 end
 
 function view:Select(index)
-    self:CommitRename()
+    if self:CommitRename() == false then return end
     book:Select(index); self.mode = "note"; self.picker:Hide()
     self:Refresh()
 end
 
 function view:Refresh()
+    -- Keep settings usable after reducing the notebook to a single text line.
+    if self.mode == "settings" and self.root:GetHeight() < 300 then
+        self.noteHeight = self.root:GetHeight(); self.root:SetHeight(300)
+    elseif self.mode ~= "settings" and self.noteHeight then
+        local height = self.noteHeight; self.noteHeight = nil; self.root:SetHeight(height)
+    end
     self.writing = true
     self.editor:SetText(book:Current().body)
     self.writing = false
@@ -26,6 +35,16 @@ function view:Refresh()
 end
 
 function view:CommitRename(cancel)
+    if self.creatingNew then
+        local name = strip(self.rename:GetText())
+        if not cancel and name == "" then self.rename:SetFocus(); return false end
+        self.creatingNew = nil
+        self.rename:ClearFocus(); self.renamePanel:Hide()
+        if not cancel then
+            book:Add(name); self.mode = "note"; self:Refresh(); self.editor:SetFocus()
+        end
+        return true
+    end
     if not self.renaming then return end
     local page = self.renaming
     self.renaming = nil
@@ -38,19 +57,23 @@ function view:CommitRename(cancel)
 end
 
 function view:Rename(index)
-    self:CommitRename()
+    if self:CommitRename() == false then return end
     self.renaming = book.data.pages[index]
+    self.renameTitle:SetText(L["Rename note (Enter to save)"])
     self.rename:SetText(self.renaming.name)
     self.renamePanel:Show(); self.rename:SetFocus(); self.rename:HighlightText()
 end
 
 function view:NewPage()
-    self:CommitRename(); book:Add(); self.mode = "note"
-    self.picker:Hide(); self:Refresh(); self.editor:SetFocus()
+    self:CommitRename(true); self:CloseSearch(); self.picker:Hide(); self.editor:ClearFocus()
+    self.creatingNew = true
+    self.renameTitle:SetText(L["Name for the new note"])
+    self.rename:SetText(""); self.renamePanel:Show(); self.rename:SetFocus()
 end
 
 function view:Settings()
-    self:CommitRename(); self:CloseSearch(); self.picker:Hide()
+    if self:CommitRename() == false then return end
+    self:CloseSearch(); self.picker:Hide()
     self.settingsOpen = true; self.mode = "settings"; self:Refresh()
 end
 
@@ -64,69 +87,177 @@ end
 
 function view:Find()
     local query = strip(self.search:GetText())
-    if query == "" then return end
-    local matches = book:Search(query)
-    self:CloseSearch()
-    if #matches == 0 then
+    if query == "" then self.searchState=nil; return end
+    if self:CommitRename()==false then return end
+    local folded=app.Fold(query)
+    local page=book:Current()
+    local previous=self.searchState
+    local continuing=previous and previous.query==folded and previous.page==page and previous.body==page.body
+    local destination,first,last
+    if not continuing or previous.last then
+        first,last=app.Find(page.body,query,continuing and previous.last+1 or 1)
+        if first or (not continuing and app.Fold(page.name):find(folded,1,true)) then destination=book.data.selected end
+    end
+    -- Continue within this note, then scan the others and wrap to the first hit.
+    if not destination then
+        for step=1,#book.data.pages do
+            local index=(book.data.selected-1+step)%#book.data.pages+1
+            local candidate=book.data.pages[index]
+            first,last=app.Find(candidate.body,query)
+            if first or app.Fold(candidate.name):find(folded,1,true) then destination=index; break end
+        end
+    end
+    if not destination then
+        self.searchState=nil
         self.notice:SetText(L["No matching notes"]); self.notice:Show(); self.noticeTime = 2.2
+        self.search:SetFocus()
         return
     end
-    local destination = matches[1]
-    for _, index in ipairs(matches) do if index > book.data.selected then destination = index; break end end
-    self:Select(destination); self.editor:SetFocus()
-    local first, last = app.Find(book:Current().body, query)
+    self.notice:Hide(); self.noticeTime=nil
+    self:Select(destination)
+    page=book:Current()
+    self.searchState={query=folded,page=page,body=page.body,last=last}
     if first then self.editor:SetCursorPosition(last); self.editor:HighlightText(first-1, last) end
+    self.search:SetFocus()
 end
 
+-- Measure labels instead of fixing tab widths; long tabs remain scrollable.
 function view:Tabs()
-    for _, button in ipairs(self.tabButtons) do button:Hide() end
-    local count, offset, selectedOffset, slot = 0, 0, 0, 0
-    for _, page in ipairs(book.data.pages) do if page.open then count = count+1 end end
-    for index, page in ipairs(book.data.pages) do
-        if page.open then
+    -- Keep visible buttons alive: Hide would cancel an in-progress mouse click.
+    local count, offset, selectedOffset, selectedWidth, slot = 0, 0, 0, 0, 0
+    count=#book.data.tabOrder
+    for _,index in ipairs(book.data.tabOrder) do
+        local page=book.data.pages[index]
+        do
             slot = slot+1
             local pageIndex = index
             local button = self.tabButtons[slot]
             if not button then
-                button = skin:Button(self.tabCanvas, nil, nil, function() end, 150)
-                button:SetHeight(35)
+                button = skin:Button(self.tabCanvas, nil, nil, function() end)
+                button:SetHeight(TAB_HEIGHT-1)
                 button.label = skin:Label(button, "")
-                button.label:SetPoint("LEFT", 10, 0); button.label:SetWidth(110); button.label:SetJustifyH("LEFT")
-                button.close = skin:Button(button,"close",L["Close tab (keep note)"],function() end,22)
-                button.close:SetPoint("RIGHT", -3,0)
+                button.label:SetPoint("LEFT", 8, 0); button.label:SetJustifyH("LEFT")
+                button.close = skin:Button(button,"close",L["Close tab temporarily"],function() end,12)
+                button.close:SetPoint("RIGHT", -6,0)
+                button.close:SetHeight(12)
+                button.close.icon:SetSize(10,10)
                 button.accent = button:CreateTexture(nil,"OVERLAY")
                 app.platform:Color(button.accent,skin.colors.blue); button.accent:SetHeight(2)
                 button.accent:SetPoint("TOPLEFT"); button.accent:SetPoint("TOPRIGHT")
-                button:SetScript("OnEnter",nil); button:SetScript("OnLeave",nil)
+                button.sortOutline=skin:Outline(button)
+                for edge,texture in ipairs(button.sortOutline) do
+                    if edge<=2 then texture:SetHeight(2) else texture:SetWidth(2) end
+                    texture:Hide()
+                end
+                button:SetScript("OnEnter",function(frame)
+                    if self.tabPress and self.tabPress.active then return end
+                    GameTooltip:SetOwner(frame,"ANCHOR_TOP")
+                    GameTooltip:SetText(L["Hold, then drag to reorder"]); GameTooltip:Show()
+                end)
+                button:SetScript("OnLeave",function() GameTooltip:Hide() end)
+                button:SetScript("OnMouseDown",function(frame,mouseButton)
+                    frame.suppressClick=nil
+                    if mouseButton~="LeftButton" or self.animation or self.creatingNew then return end
+                    local x,y=GetCursorPosition()
+                    self.tabPress={index=frame.pageIndex,button=frame,x=x,y=y,elapsed=0}
+                end)
+                button:SetScript("OnMouseUp",function() self:EndTabDrag() end)
                 self.tabButtons[slot] = button
             end
             local active = self.mode == "note" and index == book.data.selected
+            button.pageIndex=index
+            local sorting=self.tabPress and self.tabPress.active and self.tabPress.index==index
+            button:SetAlpha(1)
+            for _,edge in ipairs(button.sortOutline) do app.platform:Color(edge,skin.colors.blue); show(edge,sorting) end
             button:ClearAllPoints(); button:SetPoint("LEFT", self.tabCanvas,"LEFT",offset,0)
-            app.platform:Color(button.fill,active and skin.colors.selected or skin.colors.tab)
-            button.label:SetText(#book.data.pages > 1 and page.name or "")
+            skin:Paint(button.fill,active and skin.colors.selected or skin.colors.tab)
+            app.platform:Color(button.accent,skin.colors.blue)
+            button.label:SetText(page.name)
+            button.label:SetWidth(0)
+            local nameWidth=math.ceil(button.label:GetStringWidth())
+            local tabWidth=nameWidth+16+(count > 1 and 18 or 0)
+            button.label:SetWidth(nameWidth)
+            button:SetWidth(tabWidth)
             button.label:SetTextColor(unpack(active and skin.colors.text or skin.colors.muted))
             show(button.accent, active); show(button.close, count > 1)
-            button:SetScript("OnClick", function() self:Select(pageIndex) end)
-            button:SetScript("OnDoubleClick", function() self:Rename(pageIndex) end)
+            button:SetScript("OnClick", function(frame)
+                if frame.suppressClick then frame.suppressClick=nil; return end
+                self:Select(pageIndex)
+            end)
             button.close:SetScript("OnClick", function() self:CommitRename(); book:Close(pageIndex); self:Refresh() end)
             button:Show()
-            if active then selectedOffset = offset end
-            offset = offset+151
+            if active then selectedOffset,selectedWidth = offset,tabWidth end
+            offset = offset+tabWidth+1
         end
     end
+    for unused=slot+1,#self.tabButtons do self.tabButtons[unused]:Hide() end
     show(self.settingsTab, self.settingsOpen)
     if self.settingsOpen then
         self.settingsTab:ClearAllPoints(); self.settingsTab:SetPoint("LEFT", self.tabCanvas,"LEFT",offset,0)
-        app.platform:Color(self.settingsTab.fill,self.mode == "settings" and skin.colors.selected or skin.colors.tab)
-        if self.mode == "settings" then selectedOffset = offset end
-        offset = offset+136
+        skin:Paint(self.settingsTab.fill,self.mode == "settings" and skin.colors.selected or skin.colors.tab)
+        self.settingsTab.label:SetWidth(0)
+        local nameWidth=math.ceil(self.settingsTab.label:GetStringWidth())
+        local tabWidth=nameWidth+34
+        self.settingsTab.label:SetWidth(nameWidth); self.settingsTab:SetWidth(tabWidth)
+        if self.mode == "settings" then selectedOffset,selectedWidth = offset,tabWidth end
+        offset = offset+tabWidth+1
     end
     self.tabCanvas:SetWidth(math.max(1,offset))
     local width = self.tabScroll:GetWidth()
     local current = self.tabScroll:GetHorizontalScroll()
-    if selectedOffset < current then current = selectedOffset
-    elseif selectedOffset+150 > current+width then current = selectedOffset+150-width end
+    if self.tabPress and self.tabPress.active then
+        -- Do not snap back to the selected note while sorting another tab.
+    elseif selectedWidth > width or selectedOffset < current then current = selectedOffset
+    elseif selectedOffset+selectedWidth > current+width then current = selectedOffset+selectedWidth-width end
     self.tabScroll:SetHorizontalScroll(math.max(0, math.min(current, math.max(0,offset-width))))
+end
+
+-- A short hold arms sorting; movement before the hold remains an ordinary click.
+function view:EndTabDrag()
+    local press=self.tabPress
+    if not press then return end
+    if press.active then press.button.suppressClick=true end
+    self.tabPress=nil
+    if press.active then
+        self.notice:Hide()
+        for _,button in ipairs(self.tabButtons) do
+            for _,edge in ipairs(button.sortOutline) do edge:Hide() end
+        end
+    end
+end
+
+function view:UpdateTabDrag(elapsed)
+    local press=self.tabPress
+    if not press then return end
+    if not IsMouseButtonDown("LeftButton") or self.animation then self:EndTabDrag(); return end
+    local x,y=GetCursorPosition()
+    local scale=self.tabScroll:GetEffectiveScale()
+    if not press.active then
+        if math.abs(x-press.x)/scale>5 or math.abs(y-press.y)/scale>5 then self.tabPress=nil; return end
+        press.elapsed=press.elapsed+elapsed
+        if press.elapsed<0.5 then return end
+        press.active=true; GameTooltip:Hide(); self:Tabs()
+        self.noticeTime=nil; self.notice:SetText(L["Drag left or right to reorder"]); self.notice:Show()
+    end
+    x,y=x/scale,y/scale
+    local bottom,top=self.tabScroll:GetBottom(),self.tabScroll:GetTop()
+    if y<bottom-12 or y>top+12 then return end
+    local left,right=self.tabScroll:GetLeft(),self.tabScroll:GetRight()
+    local scroll=self.tabScroll:GetHorizontalScroll()
+    local edge=x<left+16 and -1 or x>right-16 and 1 or 0
+    if edge~=0 then
+        self.tabScroll:SetHorizontalScroll(math.max(0,math.min(math.max(0,self.tabCanvas:GetWidth()-self.tabScroll:GetWidth()),scroll+edge*120*elapsed)))
+    end
+    local position=book:TabPosition(press.index)
+    if not position then self:EndTabDrag(); return end
+    local target=position
+    for slot=1,#book.data.tabOrder do
+        local button=self.tabButtons[slot]
+        local center=button:GetLeft()+button:GetWidth()/2
+        if slot<position and x<center then target=math.min(target,slot)
+        elseif slot>position and x>center then target=math.max(target,slot) end
+    end
+    if book:MoveTab(press.index,target) then self:Tabs() end
 end
 
 function view:List()
@@ -157,46 +288,78 @@ function view:List()
     self.listBody:SetHeight(math.max(1,#book.data.pages*33))
 end
 
+-- Layout, saved bounds and open/minimize animation.
 function view:Layout()
-    local toolbarHeight = 5+40*self.headerProgress
+    local inset=self.options.style == "wow" and 10 or 0
+    self.contentInset=inset
+    self.content:ClearAllPoints()
+    self.content:SetPoint("TOPLEFT",self.root,"TOPLEFT",inset,-inset)
+    self.content:SetPoint("BOTTOMRIGHT",self.root,"BOTTOMRIGHT",-inset,inset)
+    app.platform:ResizeBounds(self.root,360,MIN_HEIGHT+2*inset)
+    if self.root:GetHeight() < MIN_HEIGHT+2*inset then self.root:SetHeight(MIN_HEIGHT+2*inset) end
+    local toolbarHeight = 5+(HEADER_HEIGHT-5)*self.headerProgress
     self.header:SetAlpha(self.headerProgress)
     show(self.header,self.headerProgress > 0.01)
     self.header:ClearAllPoints()
-    self.header:SetPoint("TOPLEFT",0,45*(self.headerProgress-1))
-    self.header:SetPoint("TOPRIGHT",0,45*(self.headerProgress-1))
+    self.header:SetPoint("TOPLEFT",0,HEADER_HEIGHT*(self.headerProgress-1))
+    self.header:SetPoint("TOPRIGHT",0,HEADER_HEIGHT*(self.headerProgress-1))
     self.rail:ClearAllPoints()
     self.rail:SetPoint("TOPLEFT",0,-toolbarHeight); self.rail:SetPoint("TOPRIGHT",0,-toolbarHeight)
+    self.rail:SetHeight(math.max(0.01,TAB_HEIGHT*self.headerProgress))
+    self.rail:SetAlpha(self.headerProgress)
+    show(self.rail,self.headerProgress > 0.01)
     show(self.reveal,self.options.autoHide)
-    local width = self.root:GetWidth()
-    show(self.undo,width >= 440); show(self.redo,width >= 480)
-    self.tabScroll:SetWidth(math.max(1,width-40))
+    local width = self.root:GetWidth()-2*inset
+    show(self.undo,width >= 300); show(self.redo,width >= 326)
+    self.tabScroll:SetWidth(math.max(1,width-28))
     if self.editor then self.editor:SetWidth(math.max(1,self.editorScroll:GetWidth())) end
     if self.tabCanvas then self:Tabs() end
+    skin:ResizeTextures()
+    skin:ButtonState(self.autoButton)
 end
 
 function view:ApplyOpacity()
     self.root:SetAlpha(self.options.opacity*self.fade)
 end
 
+function view:ApplyLock()
+    local unlocked = not self.options.locked
+    self.root:StopMovingOrSizing()
+    self.root:SetMovable(unlocked); self.root:SetResizable(unlocked)
+    if self.badge then self.badge:StopMovingOrSizing(); self.badge:SetMovable(unlocked) end
+    if self.grip then show(self.grip,unlocked) end
+    if self.lockButton then self.lockButton.label:SetText(unlocked and L["Lock window"] or L["Unlock window"]) end
+end
+
+function view:ApplyBadgeStyle()
+    self.badge.icon:SetTexture(app.iconTexture)
+    show(self.badge.icon,self.options.minimizedIcon)
+    show(self.badge.label,not self.options.minimizedIcon)
+    self.badgeStyleButton.label:SetText(self.options.minimizedIcon and L["Minimized button: icon"] or L["Minimized button: SNP"])
+end
+
 function view:SaveBounds()
     self.root:StopMovingOrSizing()
     if self.animation then return end
+    -- Save offsets in UIParent coordinates so scaling preserves the position.
     local scale = self.root:GetEffectiveScale()/UIParent:GetEffectiveScale()
     local x,y = self.root:GetCenter()
     local cx,cy = UIParent:GetCenter()
     self.options.x,self.options.y = x*scale-cx,y*scale-cy
-    self.options.width,self.options.height = self.root:GetSize()
+    self.options.width=self.root:GetWidth()
+    self.options.height=self.noteHeight or self.root:GetHeight()
 end
 
 function view:Animate(opening, minimized)
-    self:CommitRename(); self:CloseSearch(); self.picker:Hide(); self.editor:ClearFocus()
+    if self:CommitRename() == false then return end
+    self:CloseSearch(); self.picker:Hide(); self.editor:ClearFocus()
     local homeX,homeY=self.options.x or 0,self.options.y or 0
     local homeScale=self.options.scale
     local miniScale=math.min(36/self.root:GetWidth(),36/self.root:GetHeight())
     local targetX,targetY,targetScale=homeX,homeY,homeScale
     if minimized then
-        targetX=homeX-self.root:GetWidth()*homeScale/2+18
-        targetY=homeY+self.root:GetHeight()*homeScale/2-18
+        targetX=self.options.badgeX or homeX-self.root:GetWidth()*homeScale/2+18
+        targetY=self.options.badgeY or homeY+self.root:GetHeight()*homeScale/2-18
         targetScale=miniScale
         self.badge:ClearAllPoints()
         self.badge:SetPoint("CENTER",UIParent,"CENTER",targetX,targetY)
@@ -206,7 +369,12 @@ function view:Animate(opening, minimized)
         self.badge:Hide()
         if not self.root:IsShown() then
             self.fade=0; self:ApplyOpacity()
-            if not wasMinimized then
+            if wasMinimized then
+                local x,y=self.badge:GetCenter(); local cx,cy=UIParent:GetCenter()
+                local badgeScale=self.badge:GetEffectiveScale()/UIParent:GetEffectiveScale()
+                self.root:SetScale(miniScale); self.root:ClearAllPoints()
+                self.root:SetPoint("CENTER",UIParent,"CENTER",(x*badgeScale-cx)/miniScale,(y*badgeScale-cy)/miniScale)
+            else
                 self.root:SetScale(homeScale*0.88)
                 self.root:ClearAllPoints()
                 self.root:SetPoint("CENTER",UIParent,"CENTER",homeX/(homeScale*0.88),homeY/(homeScale*0.88))
@@ -226,13 +394,15 @@ function view:Animate(opening, minimized)
 end
 
 function view:Tick(elapsed)
+    self:UpdateTabDrag(elapsed)
     if self.noticeTime then
         self.noticeTime = self.noticeTime-elapsed
         if self.noticeTime <= 0 then self.notice:Hide(); self.noticeTime = nil end
     end
-    local hovering = MouseIsOver(self.header) or MouseIsOver(self.reveal)
+    local hovering = (self.header:IsShown() and self.header:IsMouseOver())
+        or (self.rail:IsShown() and self.rail:IsMouseOver()) or self.reveal:IsMouseOver()
     local focused = self.search:HasFocus() or self.rename:HasFocus()
-    if hovering or focused or self.picker:IsShown() or not self.options.autoHide then self.idle = 0
+    if hovering or focused or self.tabPress or self.picker:IsShown() or not self.options.autoHide then self.idle = 0
     else self.idle = (self.idle or 0)+elapsed end
     local target = self.options.autoHide and (self.idle or 0)>0.45 and 0 or 1
     if self.headerProgress ~= target then
@@ -263,38 +433,41 @@ function view:Tick(elapsed)
     end
 end
 
+-- Toolbar, editor, dialogs and settings.
 function view:BuildHeader()
-    local header = CreateFrame("Frame",nil,self.root)
-    self.header = header; header:SetHeight(45)
+    local header = CreateFrame("Frame",nil,self.content)
+    self.header = header; header:SetHeight(HEADER_HEIGHT)
     header:SetFrameLevel(self.root:GetFrameLevel()+10)
     skin:Fill(header,skin.colors.toolbar)
     header:EnableMouse(true); header:RegisterForDrag("LeftButton")
-    header:SetScript("OnDragStart",function() if not self.animation then self.root:StartMoving() end end)
+    header:SetScript("OnDragStart",function()
+        if not self.animation and not self.options.locked then self.root:StartMoving() end
+    end)
     header:SetScript("OnDragStop",function() self:SaveBounds() end)
     local function left(icon,tip,offset,callback)
         local button=skin:Button(header,icon,tip,callback); button:SetPoint("LEFT",offset,0); return button
     end
-    left("list",L["All notes"],8,function()
+    left("list",L["All notes"],6,function()
         self:CloseSearch(); show(self.picker,not self.picker:IsShown())
     end)
-    left("previous",L["Previous note"],47,function() self:Select(math.max(1,book.data.selected-1)) end)
-    left("next",L["Next note"],79,function() self:Select(math.min(#book.data.pages,book.data.selected+1)) end)
-    self.searchButton = left("search",L["Search notes"],111,function() self:Search() end)
-    self.undo = left("undo",L["Undo (Ctrl+Z)"],143,function() if self.mode == "note" then book:Restore(-1); self:Refresh() end end)
-    self.redo = left("redo",L["Redo (Ctrl+Y)"],175,function() if self.mode == "note" then book:Restore(1); self:Refresh() end end)
+    left("previous",L["Previous note"],32,function() self:Select(book:Neighbor(-1)) end)
+    left("next",L["Next note"],58,function() self:Select(book:Neighbor(1)) end)
+    self.searchButton = left("search",L["Search notes"],84,function() self:Search() end)
+    self.undo = left("undo",L["Undo (Ctrl+Z)"],110,function() if self.mode == "note" then book:Restore(-1); self:Refresh() end end)
+    self.redo = left("redo",L["Redo (Ctrl+Y)"],136,function() if self.mode == "note" then book:Restore(1); self:Refresh() end end)
     local function right(icon,tip,offset,callback)
         local button = skin:Button(header,icon,tip,callback); button:SetPoint("RIGHT",offset,0); return button
     end
-    right("close",L["Close"],-8,function() self:Animate(false,false) end)
-    right("minimize",L["Minimize"],-40,function() self:Animate(false,true) end)
-    right("settings",L["Settings"],-72,function() self:Settings() end)
-    self.autoButton = right("autoHide",L["Auto-hide toolbar"],-104,function()
+    right("close",L["Close"],-6,function() self:Animate(false,false) end)
+    right("minimize",L["Minimize"],-32,function() self:Animate(false,true) end)
+    right("settings",L["Settings"],-58,function() self:Settings() end)
+    self.autoButton = right("autoHide",L["Auto-hide toolbar"],-84,function()
         self.options.autoHide = not self.options.autoHide
         self.autoButton.active = self.options.autoHide; self.idle = 0; self:Layout()
     end)
     self.autoButton.active = self.options.autoHide
-    app.platform:Color(self.autoButton.fill,self.options.autoHide and skin.colors.active or skin.colors.button)
-    self.reveal = CreateFrame("Button",nil,self.root)
+    skin:Paint(self.autoButton.fill,self.options.autoHide and skin.colors.active or skin.colors.button)
+    self.reveal = CreateFrame("Button",nil,self.content)
     self.reveal:SetPoint("TOPLEFT"); self.reveal:SetPoint("TOPRIGHT"); self.reveal:SetHeight(5)
     self.reveal:SetFrameLevel(header:GetFrameLevel()+3)
     skin:Fill(self.reveal,skin.colors.border)
@@ -303,37 +476,45 @@ function view:BuildHeader()
 end
 
 function view:BuildTabs()
-    self.rail = CreateFrame("Frame",nil,self.root); self.rail:SetHeight(36)
+    self.rail = CreateFrame("Frame",nil,self.content); self.rail:SetHeight(TAB_HEIGHT)
     skin:Fill(self.rail,skin.colors.rail)
-    local plus=skin:Button(self.rail,"plus",L["New note"],function() self:NewPage() end,38)
-    plus:SetPoint("RIGHT"); plus:SetHeight(35)
+    local plus=skin:Button(self.rail,"plus",L["New note"],function() self:NewPage() end)
+    plus:SetPoint("RIGHT",-4,0)
     self.tabScroll=CreateFrame("ScrollFrame",nil,self.rail)
-    self.tabScroll:SetPoint("TOPLEFT"); self.tabScroll:SetHeight(35)
-    self.tabCanvas=CreateFrame("Frame",nil,self.tabScroll); self.tabCanvas:SetSize(1,35)
+    self.tabScroll:SetPoint("TOPLEFT"); self.tabScroll:SetHeight(TAB_HEIGHT-1)
+    self.tabCanvas=CreateFrame("Frame",nil,self.tabScroll); self.tabCanvas:SetSize(1,TAB_HEIGHT-1)
     self.tabScroll:SetScrollChild(self.tabCanvas); self.tabScroll:EnableMouseWheel(true)
     self.tabScroll:SetScript("OnMouseWheel",function(frame,delta)
         frame:SetHorizontalScroll(math.max(0,math.min(math.max(0,self.tabCanvas:GetWidth()-frame:GetWidth()),frame:GetHorizontalScroll()-delta*80)))
     end)
-    self.settingsTab=skin:Button(self.tabCanvas,nil,nil,function() self:Settings() end,135)
-    self.settingsTab:SetHeight(35)
-    local label=skin:Label(self.settingsTab,L["Settings"]); label:SetPoint("LEFT",12,0)
-    label:SetWidth(90); label:SetJustifyH("LEFT")
+    self.settingsTab=skin:Button(self.tabCanvas,nil,nil,function() self:Settings() end)
+    self.settingsTab:SetHeight(TAB_HEIGHT-1)
+    local label=skin:Label(self.settingsTab,L["Settings"]); label:SetPoint("LEFT",8,0)
+    self.settingsTab.label=label; label:SetJustifyH("LEFT")
     local close=skin:Button(self.settingsTab,"close",L["Close settings"],function()
         self.settingsOpen=false; self.mode="note"; self:Refresh()
-    end,22)
-    close:SetPoint("RIGHT",-3,0); self.settingsTab:Hide()
+    end,12)
+    close:SetPoint("RIGHT",-6,0); close:SetHeight(12); self.settingsTab:Hide()
+    close.icon:SetSize(10,10)
+    self.settingsTab.close=close
 end
 
 function view:BuildEditor()
-    self.editorScroll=CreateFrame("ScrollFrame",nil,self.root,"UIPanelScrollFrameTemplate")
-    self.editorScroll:SetPoint("TOPLEFT",self.rail,"BOTTOMLEFT",12,-10)
-    self.editorScroll:SetPoint("BOTTOMRIGHT",-28,12)
+    self.editorScroll=skin:ScrollFrame(self.content)
+    self.editorScroll:SetPoint("TOPLEFT",self.rail,"BOTTOMLEFT",8,-4)
+    self.editorScroll:SetPoint("BOTTOMRIGHT",-24,20)
     local editor=CreateFrame("EditBox",nil,self.editorScroll)
     self.editor=editor; editor:SetMultiLine(true); editor:SetAutoFocus(false)
     editor:SetFontObject("ChatFontNormal"); editor:SetTextColor(unpack(skin.colors.text))
     editor:SetTextInsets(4,4,4,4); app.platform:Hyperlinks(editor); editor:SetHeight(1)
     self.editorScroll:SetScrollChild(editor)
-    self.editorScroll:SetScript("OnSizeChanged",function(_,width) editor:SetWidth(math.max(1,width)) end)
+    self.editorScroll:EnableMouse(true)
+    self.editorScroll:SetScript("OnMouseDown",function(_,button)
+        if button ~= "LeftButton" then return end
+        self:CloseSearch(); self.picker:Hide(); self:CommitRename()
+        editor:SetFocus(); editor:SetCursorPosition(#editor:GetText())
+    end)
+    self.editorScroll:HookScript("OnSizeChanged",function(_,width) editor:SetWidth(math.max(1,width)) end)
     editor:SetScript("OnTextChanged",function(frame) if not self.writing then book:Record(frame:GetText()) end end)
     editor:SetScript("OnMouseDown",function() self:CloseSearch(); self.picker:Hide(); self:CommitRename() end)
     editor:SetScript("OnEscapePressed",function(frame) frame:ClearFocus() end)
@@ -355,11 +536,11 @@ function view:BuildEditor()
 end
 
 function view:BuildPopovers()
-    self.picker=CreateFrame("Frame",nil,self.root)
+    self.picker=CreateFrame("Frame",nil,self.content)
     self.picker:SetPoint("TOPLEFT",self.header,"BOTTOMLEFT",8,0); self.picker:SetSize(290,240)
     self.picker:SetFrameLevel(self.header:GetFrameLevel()+20); self.picker:EnableMouse(true)
     skin:Fill(self.picker,skin.colors.rail); self.picker:Hide()
-    local scroll=CreateFrame("ScrollFrame",nil,self.picker,"UIPanelScrollFrameTemplate")
+    local scroll=skin:ScrollFrame(self.picker)
     scroll:SetPoint("TOPLEFT",5,-5); scroll:SetPoint("BOTTOMRIGHT",-28,5)
     self.listBody=CreateFrame("Frame",nil,scroll); self.listBody:SetSize(252,1); scroll:SetScrollChild(self.listBody)
     self.searchPanel=CreateFrame("Frame",nil,self.header)
@@ -371,31 +552,45 @@ function view:BuildPopovers()
     self.search:SetAutoFocus(false); self.search:SetFontObject("ChatFontNormal")
     self.search:SetTextColor(unpack(skin.colors.text)); self.search:SetTextInsets(5,5,0,0)
     skin:Fill(self.search,skin.colors.hover)
+    self.searchBorder=skin:Outline(self.search)
     self.search:SetScript("OnEnterPressed",function() self:Find() end)
     self.search:SetScript("OnEscapePressed",function() self:CloseSearch() end)
     self.searchPanel:Hide()
-    self.renamePanel=CreateFrame("Frame",nil,self.root)
-    self.renamePanel:SetPoint("CENTER"); self.renamePanel:SetSize(280,90)
+    self.renamePanel=CreateFrame("Frame",nil,self.content)
+    self.renamePanel:SetPoint("CENTER"); self.renamePanel:SetSize(280,125)
     self.renamePanel:SetFrameLevel(self.header:GetFrameLevel()+40); self.renamePanel:EnableMouse(true)
     skin:Fill(self.renamePanel,skin.colors.toolbar)
     local label=skin:Label(self.renamePanel,L["Rename note (Enter to save)"]); label:SetPoint("TOPLEFT",12,-12)
+    self.renameTitle=label
     label:SetWidth(256); label:SetHeight(28); label:SetJustifyH("LEFT")
     self.rename=CreateFrame("EditBox",nil,self.renamePanel)
-    self.rename:SetPoint("TOPLEFT",12,-46); self.rename:SetPoint("BOTTOMRIGHT",-12,15)
+    self.rename:SetPoint("TOPLEFT",12,-46); self.rename:SetPoint("TOPRIGHT",-12,-46); self.rename:SetHeight(26)
     self.rename:SetAutoFocus(false); self.rename:SetFontObject("ChatFontNormal")
     self.rename:SetTextColor(unpack(skin.colors.text)); self.rename:SetTextInsets(5,5,0,0)
     skin:Fill(self.rename,skin.colors.button)
     self.rename:SetScript("OnEnterPressed",function() self:CommitRename(); self:Refresh() end)
     self.rename:SetScript("OnEscapePressed",function() self:CommitRename(true); self:Refresh() end)
-    self.rename:SetScript("OnEditFocusLost",function() self:CommitRename(); self:Refresh() end)
+    self.rename:SetScript("OnEditFocusLost",function()
+        if not self.creatingNew then self:CommitRename(); self:Refresh() end
+    end)
+    local save=skin:Button(self.renamePanel,nil,nil,function() self:CommitRename(); self:Refresh() end,118)
+    save:SetPoint("BOTTOMLEFT",12,12)
+    skin:Label(save,L["Save"]):SetPoint("CENTER")
+    local cancel=skin:Button(self.renamePanel,nil,nil,function() self:CommitRename(true); self:Refresh() end,118)
+    cancel:SetPoint("BOTTOMRIGHT",-12,12)
+    skin:Label(cancel,L["Cancel"]):SetPoint("CENTER")
     self.renamePanel:Hide()
-    self.notice=skin:Label(self.root,""); self.notice:SetPoint("TOPRIGHT",self.rail,"BOTTOMRIGHT",-15,-12); self.notice:Hide()
+    self.notice=skin:Label(self.content,""); self.notice:SetPoint("TOPRIGHT",self.rail,"BOTTOMRIGHT",-15,-12); self.notice:Hide()
 end
 
 function view:BuildSettings()
-    self.preferences=CreateFrame("Frame",nil,self.root)
+    self.preferences=CreateFrame("Frame",nil,self.content)
     self.preferences:SetPoint("TOPLEFT",self.rail,"BOTTOMLEFT",0,0); self.preferences:SetPoint("BOTTOMRIGHT")
-    local card=CreateFrame("Frame",nil,self.preferences); card:SetSize(260,175); card:SetPoint("CENTER")
+    local settingsScroll=skin:ScrollFrame(self.preferences)
+    self.settingsScroll=settingsScroll
+    settingsScroll:SetPoint("TOPLEFT",24,-16); settingsScroll:SetPoint("BOTTOMRIGHT",-30,16)
+    local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,400)
+    settingsScroll:SetScrollChild(card)
     local title=skin:Label(card,L["Settings"]); title:SetPoint("TOPLEFT",0,0)
     local function slider(caption,value,low,high,offset,callback)
         local label=skin:Label(card,caption); label:SetPoint("TOPLEFT",0,offset)
@@ -428,31 +623,126 @@ function view:BuildSettings()
         button.label:SetText(self.options.minimap and L["Minimap icon: on"] or L["Minimap icon: off"])
     end,260)
     minimap:SetPoint("TOPLEFT",0,-140); minimap.label=skin:Label(minimap,self.options.minimap and L["Minimap icon: on"] or L["Minimap icon: off"])
-    minimap.label:SetPoint("CENTER"); self.preferences:Hide()
+    minimap.label:SetPoint("CENTER")
+    self.badgeStyleButton=skin:Button(card,nil,nil,function()
+        self.options.minimizedIcon=not self.options.minimizedIcon; self:ApplyBadgeStyle()
+    end,260)
+    self.badgeStyleButton:SetPoint("TOPLEFT",0,-180)
+    self.badgeStyleButton.label=skin:Label(self.badgeStyleButton,""); self.badgeStyleButton.label:SetPoint("CENTER")
+    self.lockButton=skin:Button(card,nil,nil,function()
+        self.options.locked=not self.options.locked; self:ApplyLock()
+    end,260)
+    self.lockButton:SetPoint("TOPLEFT",0,-215)
+    self.lockButton.label=skin:Label(self.lockButton,""); self.lockButton.label:SetPoint("CENTER")
+    self.styleButton=skin:Button(card,nil,nil,function()
+        self.options.style=self.options.style == "wow" and "flat" or "wow"
+        self:ApplyStyle()
+    end,260)
+    self.styleButton:SetPoint("TOPLEFT",0,-250)
+    self.styleButton.label=skin:Label(self.styleButton,""); self.styleButton.label:SetPoint("CENTER")
+    local background=skin:Button(card,nil,nil,function() self:ChooseColor("backgroundColor",skin.colors.editor) end,260)
+    background:SetPoint("TOPLEFT",0,-285); skin:Label(background,L["Background color"]):SetPoint("CENTER")
+    local accent=skin:Button(card,nil,nil,function() self:ChooseColor("accentColor",skin.colors.blue) end,260)
+    accent:SetPoint("TOPLEFT",0,-320); skin:Label(accent,L["Accent color"]):SetPoint("CENTER")
+    local reset=skin:Button(card,nil,nil,function()
+        if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
+        self.options.style="flat"; self.options.backgroundColor=nil; self.options.accentColor=nil
+        self:ApplyStyle()
+    end,260)
+    reset:SetPoint("TOPLEFT",0,-355); skin:Label(reset,L["Reset appearance"]):SetPoint("CENTER")
+    self.preferences:Hide()
 end
 
+function view:ChooseColor(key, fallback)
+    local original=self.options[key]
+    local color=original or fallback
+    app.platform:ChooseColor(color,function(r,g,b)
+        self.options[key]={r,g,b}; self:ApplyStyle()
+    end,function()
+        self.options[key]=original; self:ApplyStyle()
+    end)
+end
+
+function view:ApplyStyle()
+    skin:Configure(self.options)
+    if self.styleButton then self.styleButton.label:SetText(self.options.style == "wow" and L["Style: WoW"] or L["Style: modern"]) end
+    if self.editor then self.editor:SetTextColor(unpack(skin.colors.text)) end
+    if self.search then self.search:SetTextColor(unpack(skin.colors.text)) end
+    if self.rename then self.rename:SetTextColor(unpack(skin.colors.text)) end
+    if self.opacitySlider then self.opacitySlider:GetThumbTexture():SetVertexColor(unpack(skin.colors.blue)) end
+    if self.scaleSlider then self.scaleSlider:GetThumbTexture():SetVertexColor(unpack(skin.colors.blue)) end
+    if self.autoButton then skin:Paint(self.autoButton.fill,self.options.autoHide and skin.colors.active or skin.colors.button) end
+    if self.root then
+        if not self.border then
+            self.border=CreateFrame("Frame",nil,self.root,BackdropTemplateMixin and "BackdropTemplate" or nil)
+            self.border:SetAllPoints(); self.border:EnableMouse(false)
+            self.border:SetFrameLevel(self.header:GetFrameLevel()+5)
+        end
+        if self.border.SetBackdrop then
+            self.border:SetBackdrop(self.options.style == "wow" and {
+                edgeFile="Interface\\DialogFrame\\UI-DialogBox-Border", edgeSize=24,
+            } or nil)
+            if self.options.style == "wow" then self.border:SetBackdropBorderColor(0.85,0.72,0.43,1) end
+        end
+        self:Layout(); self:Refresh()
+    end
+end
+
+-- Addon entry points; window construction stays hidden until fully initialized.
 function app:BuildWindow()
     view.options=book.data.options
+    skin:Configure(view.options)
     view.root=CreateFrame("Frame",nil,UIParent)
-    view.root:SetSize(view.options.width or 680,view.options.height or 450)
+    -- A failed build must never leave a visible frame intercepting mouse input.
+    view.root:Hide()
+    view.root:SetSize(math.max(360,view.options.width or 680),math.max(MIN_HEIGHT,view.options.height or 450))
     view.root:SetScale(view.options.scale)
     view.root:SetPoint("CENTER",UIParent,"CENTER",(view.options.x or 0)/view.options.scale,(view.options.y or 0)/view.options.scale)
     view.root:SetFrameStrata("DIALOG"); view.root:SetClampedToScreen(true)
     view.root:SetMovable(true); view.root:SetResizable(true); view.root:EnableMouse(true)
     app.platform:Clip(view.root)
-    app.platform:ResizeBounds(view.root,360,300)
-    skin:Fill(view.root,skin.colors.editor)
+    app.platform:ResizeBounds(view.root,360,MIN_HEIGHT)
+    view.content=CreateFrame("Frame",nil,view.root)
+    app.platform:Clip(view.content)
+    view.backgroundFill=skin:Fill(view.content,skin.colors.editor)
     view:BuildHeader(); view:BuildTabs(); view:BuildEditor(); view:BuildPopovers(); view:BuildSettings()
-    view.badge=skin:Button(UIParent,nil,L["Restore SimpleNotepad"],function() view:Animate(true) end,36)
-    view.badge.label=skin:Label(view.badge,"N"); view.badge.label:SetPoint("CENTER")
+    view.badge=skin:Button(UIParent,nil,L["Restore SimpleNotepad"],function()
+        if not view.badge.dragged then view:Animate(true) end
+        view.badge.dragged=nil
+    end,36)
+    view.badge.label=skin:Label(view.badge,"SNP"); view.badge.label:SetPoint("CENTER")
+    view.badge.icon=view.badge:CreateTexture(nil,"ARTWORK")
+    view.badge.icon:SetSize(20,20); view.badge.icon:SetPoint("CENTER")
     view.badge:SetPoint("CENTER"); view.badge:SetFrameStrata("DIALOG"); view.badge:Hide()
-    local grip=skin:Button(view.root,"resize",L["Resize"],function() end,16)
-    grip:SetHeight(16); grip:SetPoint("BOTTOMRIGHT",-2,2)
-    grip:SetScript("OnMouseDown",function() if not view.animation then view.root:StartSizing("BOTTOMRIGHT") end end)
+    view.badge:SetMovable(true); view.badge:SetClampedToScreen(true); view.badge:RegisterForDrag("LeftButton")
+    view.badge:SetScript("OnMouseDown",function() view.badge.dragged=nil end)
+    view.badge:SetScript("OnDragStart",function(button)
+        button.dragged=true
+        if not view.options.locked then button:StartMoving() end
+    end)
+    view.badge:SetScript("OnDragStop",function(button)
+        button:StopMovingOrSizing()
+        local x,y=button:GetCenter(); local cx,cy=UIParent:GetCenter()
+        local scale=button:GetEffectiveScale()/UIParent:GetEffectiveScale()
+        view.options.badgeX,view.options.badgeY=x*scale-cx,y*scale-cy
+    end)
+    local grip=skin:Button(view.root,"resize",L["Resize"],function() end,14)
+    view.grip=grip
+    grip:SetFrameLevel(view.root:GetFrameLevel()+16)
+    grip:SetHeight(14); grip.icon:SetSize(12,12); grip:SetPoint("BOTTOMRIGHT",-4,4)
+    grip:SetScript("OnMouseDown",function()
+        if not view.animation and not view.options.locked then
+            view.noteHeight=nil; view.root:StartSizing("BOTTOMRIGHT")
+        end
+    end)
     grip:SetScript("OnMouseUp",function() view:SaveBounds() end)
     view.root:SetScript("OnSizeChanged",function() view:Layout() end)
-    view.root:SetScript("OnMouseDown",function() view:CloseSearch(); view.picker:Hide(); view:CommitRename(); view:Refresh() end)
+    view.root:SetScript("OnMouseDown",function()
+        view:CloseSearch(); view.picker:Hide(); view:CommitRename()
+        if view.mode == "note" then view.editor:SetFocus(); view.editor:SetCursorPosition(#view.editor:GetText()) end
+    end)
     view.root:SetScript("OnUpdate",function(_,elapsed) view:Tick(elapsed) end)
+    view.root:SetScript("OnHide",function() view:EndTabDrag() end)
     StaticPopupDialogs.SIMPLENOTEPAD_DELETE={
         text=L["Permanently delete this note?"],button1=YES,button2=NO,
         OnAccept=function(_,page)
@@ -462,7 +752,7 @@ function app:BuildWindow()
         end,
         timeout=0,whileDead=true,hideOnEscape=true,
     }
-    view:Layout(); view:Refresh(); view:ApplyOpacity(); view.root:Hide()
+    view:ApplyStyle(); view:ApplyLock(); view:ApplyBadgeStyle(); view:Layout(); view:Refresh(); view:ApplyOpacity(); view.root:Hide()
 end
 
 function app:Toggle()

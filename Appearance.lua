@@ -1,7 +1,8 @@
-local _, app = ...
+local addonName, app = ...
 local skin = {}
 local platform = app.platform
 app.skin = skin
+-- Palette and tracked regions are updated without rebuilding the window.
 skin.colors = {
     editor = {17/255, 17/255, 17/255}, toolbar = {27/255, 28/255, 36/255},
     rail = {16/255, 16/255, 16/255}, tab = {22/255, 23/255, 28/255},
@@ -10,11 +11,81 @@ skin.colors = {
     text = {238/255, 238/255, 238/255}, muted = {150/255, 150/255, 156/255},
     blue = {0, 170/255, 1}, active = {21/255, 31/255, 41/255},
 }
+local defaults, fills, labels, fillByTexture, bevels = {}, {}, {}, {}, {}
+local buttons, scrolls, outlines = {}, {}, {}
+for key,color in pairs(skin.colors) do defaults[key]={unpack(color)} end
 
+function skin:Paint(texture,color)
+    local fill=fillByTexture[texture]
+    if fill then fill.color=color end
+    if self.wow and fill then
+        local marble=color == self.colors.editor
+        texture:SetTexture(marble and "Interface\\FrameGeneral\\UI-Background-Marble" or "Interface\\FrameGeneral\\UI-Background-Rock")
+        texture:SetHorizTile(true); texture:SetVertTile(true)
+        local size=marble and 256 or 128
+        texture:SetTexCoord(0,math.max(1,fill.parent:GetWidth())/size,0,math.max(1,fill.parent:GetHeight())/size)
+        -- The native materials are already dark. Lift the tint so their grain
+        -- remains visible instead of multiplying it by a near-black flat color.
+        texture:SetVertexColor(math.min(1,color[1]*2+0.45),math.min(1,color[2]*2+0.45),math.min(1,color[3]*2+0.45))
+        if self.lightBackground then
+            if not fill.base then
+                fill.base=fill.parent:CreateTexture(nil,"BACKGROUND",nil,-1)
+                fill.base:SetAllPoints(texture)
+            end
+            platform:Color(fill.base,color); fill.base:Show(); texture:SetAlpha(0.25)
+        else
+            if fill.base then fill.base:Hide() end
+            texture:SetAlpha(1)
+        end
+    else
+        if fill and fill.base then fill.base:Hide() end
+        texture:SetAlpha(1)
+        texture:SetHorizTile(false); texture:SetVertTile(false)
+        texture:SetTexCoord(0,1,0,1); texture:SetVertexColor(1,1,1)
+        platform:Color(texture,color)
+    end
+end
+
+function skin:ResizeTextures()
+    if self.wow then for _,fill in ipairs(fills) do self:Paint(fill.texture,fill.color) end end
+end
+
+function skin:Configure(options)
+    self.wow=options.style == "wow"
+    self.lightBackground=false
+    for key,color in pairs(defaults) do
+        for index=1,3 do self.colors[key][index]=color[index] end
+    end
+    local background=options.backgroundColor or (options.style == "wow" and {0.12,0.105,0.08})
+    if background then
+        local offsets={editor=0,toolbar=0.045,rail=-0.01,tab=0.02,selected=0.095,border=0.16,button=0.015,hover=0.10,active=0.07}
+        for key,offset in pairs(offsets) do
+            for index=1,3 do self.colors[key][index]=math.max(0,math.min(1,background[index]+offset)) end
+        end
+        local brightness=background[1]*0.299+background[2]*0.587+background[3]*0.114
+        if brightness > 0.55 then
+            self.lightBackground=true
+            self.colors.text[1],self.colors.text[2],self.colors.text[3]=0.08,0.08,0.08
+            self.colors.muted[1],self.colors.muted[2],self.colors.muted[3]=0.25,0.25,0.25
+        end
+    end
+    local accent=options.accentColor or (options.style == "wow" and {1,0.82,0})
+    if accent then for index=1,3 do self.colors.blue[index]=accent[index] end end
+    for _,fill in ipairs(fills) do self:Paint(fill.texture,fill.color) end
+    for _,edge in ipairs(bevels) do edge:SetShown(self.wow) end
+    for _,label in ipairs(labels) do label.font:SetTextColor(unpack(label.muted and self.colors.muted or self.colors.text)) end
+    for _,button in ipairs(buttons) do self:ButtonState(button) end
+    for _,scroll in ipairs(scrolls) do self:StyleScroll(scroll) end
+    for _,edge in ipairs(outlines) do platform:Color(edge,self.colors.border) end
+end
+
+-- Reusable controls.
 function skin:Fill(parent, color, layer)
     local texture = parent:CreateTexture(nil, layer or "BACKGROUND")
     texture:SetAllPoints()
-    platform:Color(texture,color)
+    local fill={texture=texture,color=color,parent=parent}
+    fills[#fills+1]=fill; fillByTexture[texture]=fill
+    self:Paint(texture,color)
     return texture
 end
 
@@ -22,78 +93,133 @@ function skin:Label(parent, text, muted)
     local label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     label:SetText(text)
     label:SetTextColor(unpack(muted and self.colors.muted or self.colors.text))
+    labels[#labels+1]={font=label,muted=muted}
     return label
 end
 
--- Small vector icons use standard textures, independent of fonts and game atlases.
-local shapes = {
-    plus = {{3,8,13,8},{8,3,8,13}}, close = {{4,4,12,12},{4,12,12,4}},
-    previous = {{10,3,5,8},{5,8,10,13}}, next = {{6,3,11,8},{11,8,6,13}},
-    list = {{5,4,13,4},{5,8,13,8},{5,12,13,12},{2,4,2.1,4},{2,8,2.1,8},{2,12,2.1,12}},
-    undo = {{7,3,3,7},{3,7,7,11},{3,7,10,7},{10,7,13,10},{13,10,13,13}},
-    redo = {{9,3,13,7},{13,7,9,11},{13,7,6,7},{6,7,3,10},{3,10,3,13}},
-    rename = {{3,11,11,3},{11,3,14,6},{14,6,6,14},{6,14,2,15},{2,15,3,11},{9,5,12,8}},
-    minimize = {{3,11,13,11}}, autoHide = {{2,6,2,2},{2,2,14,2},{14,2,14,6},{5,10,8,7},{8,7,11,10},{8,7,8,15}},
-    resize = {{6,14,14,6},{10,14,14,10}},
-}
-
-local function stroke(parent, x1, y1, x2, y2)
-    local texture = parent:CreateTexture(nil, "ARTWORK")
-    local dx, dy = x2-x1, y2-y1
-    if texture.SetRotation then
-        texture:SetSize(math.max(1.5, math.sqrt(dx*dx+dy*dy)), 1.5)
-        texture:SetPoint("CENTER", parent, "CENTER", (x1+x2)/2-8, 8-(y1+y2)/2)
-        platform:Color(texture,skin.colors.text)
-        texture:SetRotation(math.atan2(-dy, dx))
-    else
-        local steps=math.max(1,math.ceil(math.max(math.abs(dx),math.abs(dy))))
-        for step=0,steps do
-            local pixel=step==0 and texture or parent:CreateTexture(nil,"ARTWORK")
-            pixel:SetSize(1.5,1.5)
-            pixel:SetPoint("CENTER",parent,"CENTER",x1+dx*step/steps-8,8-y1-dy*step/steps)
-            platform:Color(pixel,skin.colors.text)
-        end
-    end
-end
-
 function skin:Icon(parent, name)
-    local frame = CreateFrame("Frame", nil, parent)
-    frame:SetSize(16,16); frame:SetPoint("CENTER")
-    for _, points in ipairs(shapes[name] or {}) do stroke(frame, unpack(points)) end
-    if name == "search" or name == "settings" then
-        local radius = name == "search" and 4.5 or 4
-        local center = name == "search" and 6.5 or 8
-        for index=0,15 do
-            local angle, nextAngle = index*math.pi/8, (index+1)*math.pi/8
-            stroke(frame, center+radius*math.cos(angle), center+radius*math.sin(angle),
-                center+radius*math.cos(nextAngle), center+radius*math.sin(nextAngle))
-        end
-        if name == "search" then stroke(frame,10,10,14,14)
-        else
-            for index=0,7 do
-                local angle = index*math.pi/4
-                stroke(frame,8+5*math.cos(angle),8+5*math.sin(angle),8+7*math.cos(angle),8+7*math.sin(angle))
-            end
-        end
-    end
-    return frame
+    -- Antialiased 64px assets avoid jagged rotated one-pixel texture strokes.
+    local texture=parent:CreateTexture(nil,"ARTWORK")
+    texture:SetSize(14,14); texture:SetPoint("CENTER")
+    texture:SetTexture("Interface\\AddOns\\"..addonName.."\\Media\\"..name..".tga")
+    texture:SetVertexColor(unpack(self.colors.text))
+    labels[#labels+1]={font={SetTextColor=function(_,...) texture:SetVertexColor(...) end}}
+    return texture
 end
 
 function skin:Button(parent, icon, tooltip, callback, width)
     local button = CreateFrame("Button", nil, parent)
-    button:SetSize(width or 28,28)
+    button.plain=icon ~= nil
+    button:SetSize(width or (icon and 18 or 28),icon and 18 or 28)
     button.fill = self:Fill(button, self.colors.button)
+    if button.plain then button.fill:Hide() end
+    -- Light upper edges and dark lower edges give the native stone material
+    -- the shallow inset/button treatment used by WoW panels.
+    for index=1,(button.plain and 0 or 4) do
+        local edge=button:CreateTexture(nil,"BORDER")
+        if index <= 2 then edge:SetHeight(1) else edge:SetWidth(1) end
+        if index == 1 then edge:SetPoint("TOPLEFT"); edge:SetPoint("TOPRIGHT")
+        elseif index == 2 then edge:SetPoint("BOTTOMLEFT"); edge:SetPoint("BOTTOMRIGHT")
+        elseif index == 3 then edge:SetPoint("TOPLEFT"); edge:SetPoint("BOTTOMLEFT")
+        else edge:SetPoint("TOPRIGHT"); edge:SetPoint("BOTTOMRIGHT") end
+        platform:Color(edge,(index == 1 or index == 3) and {0.46,0.40,0.29,0.65} or {0.02,0.02,0.02,0.9})
+        edge:SetShown(self.wow); bevels[#bevels+1]=edge
+    end
     if icon then button.icon = self:Icon(button, icon) end
+    buttons[#buttons+1]=button
     button:SetScript("OnEnter", function(self)
-        platform:Color(self.fill,skin.colors.hover)
+        self.hovered=true
+        if not self.plain then skin:Paint(self.fill,skin.colors.hover) end
+        skin:ButtonState(self)
         if tooltip then
             GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText(tooltip); GameTooltip:Show()
         end
     end)
     button:SetScript("OnLeave", function(self)
-        platform:Color(self.fill,self.active and skin.colors.active or skin.colors.button)
+        self.hovered=false
+        if not self.plain then skin:Paint(self.fill,self.active and skin.colors.active or skin.colors.button) end
+        skin:ButtonState(self)
         GameTooltip:Hide()
     end)
     button:SetScript("OnClick", callback)
     return button
+end
+
+function skin:ButtonState(button)
+    if button.plain then
+        button.fill:Hide()
+        button.icon:SetVertexColor(unpack((button.active or button.hovered) and self.colors.blue or self.colors.text))
+    end
+end
+
+function skin:Outline(parent)
+    local edges={}
+    for index=1,4 do
+        local edge=parent:CreateTexture(nil,"OVERLAY")
+        platform:Color(edge,self.colors.border)
+        if index <= 2 then edge:SetHeight(1) else edge:SetWidth(1) end
+        if index == 1 then edge:SetPoint("TOPLEFT"); edge:SetPoint("TOPRIGHT")
+        elseif index == 2 then edge:SetPoint("BOTTOMLEFT"); edge:SetPoint("BOTTOMRIGHT")
+        elseif index == 3 then edge:SetPoint("TOPLEFT"); edge:SetPoint("BOTTOMLEFT")
+        else edge:SetPoint("TOPRIGHT"); edge:SetPoint("BOTTOMRIGHT") end
+        edges[index]=edge
+        outlines[#outlines+1]=edge
+    end
+    return edges
+end
+
+-- Shared scrollbar visuals and state for all scrollable panes.
+function skin:StyleScroll(scroll)
+    local bar=scroll.bar
+    bar:SetWidth(self.wow and 14 or 6)
+    if self.wow then
+        bar:GetThumbTexture():SetTexture("Interface\\Buttons\\UI-ScrollBar-Knob")
+        bar:GetThumbTexture():SetTexCoord(0.2,0.8,0.125,0.875)
+        bar:GetThumbTexture():SetVertexColor(1,1,1)
+    else
+        platform:Color(bar:GetThumbTexture(),self.colors.muted)
+        bar:GetThumbTexture():SetTexCoord(0,1,0,1)
+        bar:GetThumbTexture():SetVertexColor(1,1,1)
+    end
+    scroll:UpdateScrollBar()
+end
+
+function skin:ScrollFrame(parent)
+    local scroll=CreateFrame("ScrollFrame",nil,parent)
+    local bar=CreateFrame("Slider",nil,scroll)
+    scroll.bar=bar
+    bar:SetOrientation("VERTICAL"); bar:EnableMouse(true)
+    bar:SetPoint("TOPLEFT",scroll,"TOPRIGHT",4,0)
+    bar:SetPoint("BOTTOMLEFT",scroll,"BOTTOMRIGHT",4,0)
+    self:Fill(bar,self.colors.rail)
+    bar:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
+    bar:SetValueStep(1); app.platform:Slider(bar)
+    function scroll:UpdateScrollBar()
+        -- Slider and ScrollFrame callbacks can trigger each other.
+        if self.syncing then return end
+        self.syncing=true
+        local range=math.max(0,self:GetVerticalScrollRange())
+        bar:SetMinMaxValues(0,range)
+        local value=math.max(0,math.min(range,self:GetVerticalScroll()))
+        bar:SetValue(value)
+        if value ~= self:GetVerticalScroll() then self:SetVerticalScroll(value) end
+        bar:SetShown(range > 0)
+        local height=math.max(1,self:GetHeight())
+        local thumbHeight=skin.wow and math.min(24,height) or math.min(height,math.max(18,height*height/(height+range)))
+        bar:GetThumbTexture():SetSize(skin.wow and 14 or 6,thumbHeight)
+        self.syncing=false
+    end
+    bar:SetScript("OnValueChanged",function(_,value)
+        if not scroll.syncing then scroll:SetVerticalScroll(value) end
+    end)
+    scroll:SetScript("OnVerticalScroll",function(frame) frame:UpdateScrollBar() end)
+    scroll:SetScript("OnScrollRangeChanged",function(frame) frame:UpdateScrollBar() end)
+    scroll:SetScript("OnSizeChanged",function(frame) frame:UpdateScrollBar() end)
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel",function(frame,delta)
+        frame:SetVerticalScroll(math.max(0,math.min(frame:GetVerticalScrollRange(),frame:GetVerticalScroll()-delta*40)))
+    end)
+    scrolls[#scrolls+1]=scroll
+    self:StyleScroll(scroll)
+    return scroll
 end

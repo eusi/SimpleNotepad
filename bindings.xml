@@ -1,8 +1,8 @@
 <Bindings>
-    <Binding name="SIMPLENOTEPAD_TOGGLE" header="SIMPLENOTEPAD" category="ADDONS">
+    <Binding name="SIMPLENOTEPAD_TOGGLE" header="SIMPLENOTEPAD">
         SlashCmdList.SIMPLENOTEPAD("")
     </Binding>
-    <Binding name="SIMPLENOTEPAD_SEARCH" category="ADDONS">
+    <Binding name="SIMPLENOTEPAD_SEARCH">
         SlashCmdList.SIMPLENOTEPAD("search")
     </Binding>
 </Bindings>

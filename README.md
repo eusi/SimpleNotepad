@@ -1,6 +1,6 @@
 # SimpleNotepad
 
-A simple in-game notepad for notes, reminders, and useful links.
+An in-game notepad for notes, reminders, and useful links.
 
 **Clients:** Retail, Classic Era (Hardcore/SoD), TBC Anniversary, Mists Classic, and Forever.
 
@@ -11,24 +11,41 @@ A simple in-game notepad for notes, reminders, and useful links.
 
 ## Features
 
-- Named notes with tabs, search, and a list for renaming or deleting pages.
-- Undo/redo, copy/paste, and WoW item, spell, and chat links.
-- Movable, resizable window with adjustable opacity and scale.
-- Dark interface with an optional auto-hiding toolbar.
-- Minimize/restore animations, optional minimap button, and key bindings.
-- Automatic localization for English, German, French, Spanish, Portuguese, Italian, Russian, Korean, and Chinese.
+- Named notes with tabs and previous/next navigation.
+- Reopen, rename, or delete notes through the all-notes list.
+- Close tabs without deleting notes; new and reopened tabs appear last.
+- Long-press and drag tabs to sort them.
+- Search titles and text; press Enter to cycle through matches.
+- Undo/redo, copy/paste, and clickable WoW links.
+- Shift-click inventory or chat item links into the focused note.
+- Movable, resizable window down to one text line, with saved layout.
+- Minimize to a draggable icon button.
+- Optional draggable minimap icon and configurable key bindings.
+- Languages: English, German, French, Spanish, Portuguese, Italian, Russian, Korean, and Chinese.
 
-## Commands
+## Settings
 
-- `/snp` - Show or hide the window.
-- `/snp search` - Open search.
+- **Style:** Modern or WoW.
+- **Colors:** Custom background and accent colors; reset available.
+- **Opacity:** 10-100%; default **90%**.
+- **Scale:** 65-150%.
+- **Window lock:** Lock window position, size, and minimized button.
+- **Auto-hide:** Hide toolbar and tabs; hover at the top to reveal them.
+- **Minimap icon:** Show/hide.
+- **Minimized button:** Addon icon or SNP text.
 
-You can also use `/simplenotepad` instead of `/snp`.
+## Controls
 
-## Good to know
+- `/snp`, `/sn`, `/simplenotepad`: Show/hide.
+- `/snp search`: Toggle search.
+- **Ctrl+F / Ctrl+N:** Search / new note.
+- **Ctrl+Z / Ctrl+Y:** Undo / redo.
+- **Tab:** Insert four spaces.
+- **Enter:** Next search match / save note name.
+- **Escape:** Close search / cancel dialog / release text focus.
+- **+**: Create a named note.
 
-Closing a tab keeps its note. Rename or permanently delete notes through the all-pages list. Open settings with the gear icon.
+## Storage
 
-While editing: **Ctrl+F** searches, **Ctrl+N** creates a note, **Ctrl+Z/Y** undo/redo.
-
-Notes are shared across characters within the same account and client. WoW saves them to disk on logout or `/reload`; undo history lasts only for the current session.
+- Notes are shared across characters on the same account and client.
+- Saved on logout or `/reload`; undo/redo lasts for the current session.
