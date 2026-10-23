@@ -1,8 +1,14 @@
-# SimpleNotepad
+# <img width="64" height="64" alt="logo_small" src="https://github.com/user-attachments/assets/c4bc7c57-65e0-4ea3-941d-4c4d848e87fe" /> SimpleNotepad
+
+
+
 
 An in-game notepad for notes, reminders, and useful links.
 
 **Clients:** Retail, Classic Era (Hardcore/SoD), TBC Anniversary, Mists Classic, and Forever.
+
+<img width="800" height="349" alt="111" src="https://github.com/user-attachments/assets/e5c7eb9c-053b-4e3d-95d8-fa556fdb20f1" />
+
 
 ## Installation
 
