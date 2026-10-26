@@ -2,8 +2,9 @@
 ## Title: SimpleNotepad
 ## Author: sAks
 ## Notes: A simple in-game notepad for World of Warcraft.
-## Version: 0.2.0
+## Version: 0.3.0
 ## SavedVariables: SimpleNotepad_DB
+## SavedVariablesPerCharacter: SimpleNotepad_CharacterDB
 ## IconTexture: Interface\AddOns\SimpleNotepad\Media\logo.tga
 
 Localization.lua

@@ -9,8 +9,9 @@ local boot = CreateFrame("Frame")
 boot:RegisterEvent("ADDON_LOADED")
 boot:SetScript("OnEvent", function(_, _, name)
     if name ~= addonName then return end
-    SimpleNotepad_DB = SimpleNotepad_DB or {}
-    app.journal:Load(SimpleNotepad_DB)
+    if type(SimpleNotepad_DB) ~= "table" then SimpleNotepad_DB = {} end
+    if type(SimpleNotepad_CharacterDB) ~= "table" then SimpleNotepad_CharacterDB = {} end
+    app.journal:LoadCharacter(SimpleNotepad_DB, SimpleNotepad_CharacterDB)
     app:BuildWindow()
     -- The minimap itself clips children to its mask on Retail. Keep the launcher
     -- outside that mask and explicitly above the minimap artwork.

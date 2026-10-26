@@ -151,6 +151,25 @@ local extraTranslations = {
 extraTranslations.esMX = extraTranslations.esES
 local extra = extraTranslations[language]
 for index,key in ipairs(extraKeys) do strings[key] = extra and extra[index] or key end
+local sharingKeys = {
+    "Character-only note. Click to share with all characters.",
+    "Shared with all characters. Click to make character-only.",
+    "Permanently delete this shared note for all characters?",
+}
+local sharingTranslations = {
+    deDE = {"Nur für diesen Charakter. Klicken, um die Notiz mit allen Charakteren zu teilen.", "Mit allen Charakteren geteilt. Klicken, um die Notiz nur für diesen Charakter zu behalten.", "Diese geteilte Notiz für alle Charaktere endgültig löschen?"},
+    frFR = {"Note propre à ce personnage. Cliquer pour la partager avec tous les personnages.", "Partagée avec tous les personnages. Cliquer pour la réserver à ce personnage.", "Supprimer définitivement cette note partagée pour tous les personnages ?"},
+    esES = {"Nota de este personaje. Haz clic para compartirla con todos los personajes.", "Compartida con todos los personajes. Haz clic para conservarla solo en este personaje.", "¿Eliminar permanentemente esta nota compartida para todos los personajes?"},
+    ptBR = {"Nota deste personagem. Clique para compartilhar com todos os personagens.", "Compartilhada com todos os personagens. Clique para manter apenas neste personagem.", "Excluir permanentemente esta nota compartilhada de todos os personagens?"},
+    itIT = {"Nota di questo personaggio. Clicca per condividerla con tutti i personaggi.", "Condivisa con tutti i personaggi. Clicca per mantenerla solo per questo personaggio.", "Eliminare definitivamente questa nota condivisa per tutti i personaggi?"},
+    ruRU = {"Личная заметка персонажа. Нажмите, чтобы открыть доступ всем персонажам.", "Доступна всем персонажам. Нажмите, чтобы оставить только этому персонажу.", "Навсегда удалить эту общую заметку для всех персонажей?"},
+    koKR = {"이 캐릭터만의 메모입니다. 클릭하면 모든 캐릭터와 공유합니다.", "모든 캐릭터와 공유 중입니다. 클릭하면 이 캐릭터만 사용합니다.", "이 공유 메모를 모든 캐릭터에서 영구적으로 삭제할까요?"},
+    zhCN = {"仅此角色可见。点击与所有角色共享此笔记。", "所有角色共享。点击将此笔记改为仅此角色可见。", "确定为所有角色永久删除此共享笔记？"},
+    zhTW = {"僅此角色可見。點擊與所有角色共用此筆記。", "所有角色共用。點擊將此筆記改為僅此角色可見。", "確定為所有角色永久刪除此共用筆記？"},
+}
+sharingTranslations.esMX = sharingTranslations.esES
+local sharing = sharingTranslations[language]
+for index, key in ipairs(sharingKeys) do strings[key] = sharing and sharing[index] or key end
 app.L = strings
 
 local folded = {}

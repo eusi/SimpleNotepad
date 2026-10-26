@@ -20,7 +20,8 @@ function skin:Paint(texture,color)
     if fill then fill.color=color end
     if self.wow and fill then
         local marble=color == self.colors.editor
-        texture:SetTexture(marble and "Interface\\FrameGeneral\\UI-Background-Marble" or "Interface\\FrameGeneral\\UI-Background-Rock")
+        -- Repeat the material beyond its edges instead of smearing the last pixel.
+        texture:SetTexture(marble and "Interface\\FrameGeneral\\UI-Background-Marble" or "Interface\\FrameGeneral\\UI-Background-Rock", "REPEAT", "REPEAT")
         texture:SetHorizTile(true); texture:SetVertTile(true)
         local size=marble and 256 or 128
         texture:SetTexCoord(0,math.max(1,fill.parent:GetWidth())/size,0,math.max(1,fill.parent:GetHeight())/size)

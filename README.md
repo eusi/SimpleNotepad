@@ -18,6 +18,7 @@ An in-game notepad for notes, reminders, and useful links.
 ## Features
 
 - Named notes with tabs and previous/next navigation.
+- Character-only notes by default, global notes via globe toggle.
 - Reopen, rename, or delete notes through the all-notes list.
 - Close tabs without deleting notes; new and reopened tabs appear last.
 - Long-press and drag tabs to sort them.
@@ -53,5 +54,9 @@ An in-game notepad for notes, reminders, and useful links.
 
 ## Storage
 
-- Notes are shared across characters on the same account and client.
+- Notes, open tabs, and the selected note are saved per character.
+- Toggle the globe next to a note in **All notes** to share it across characters on the same account and client. A highlighted globe means shared; a dim globe means character-only.
+- Turning sharing off keeps the note on the current character and removes it from other characters on their next login. Deleting a shared note deletes it for all characters.
+- Existing shared notes are imported once for each character; the original shared copy is preserved.
+- Appearance settings remain shared across characters on the same account and client.
 - Saved on logout or `/reload`; undo/redo lasts for the current session.
