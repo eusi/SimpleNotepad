@@ -117,6 +117,11 @@ function journal:SetShared(index, enabled)
     return true
 end
 
+function journal:StyleColors()
+    local options=self.data.options
+    return options.styleColors[options.style]
+end
+
 function journal:Load(database, account, character, references)
     if database ~= self.data then
         self.account, self.character, self.sharedRefs = account, character, references or {}
@@ -128,6 +133,18 @@ function journal:Load(database, account, character, references)
     local defaults = {opacity = 0.9, scale = 1, minimap = true, autoHide = false, style = "flat", locked = false, minimizedIcon = true}
     for key, value in pairs(defaults) do
         if database.options[key] == nil then database.options[key] = value end
+    end
+    local options=database.options
+    if options.style~="wow" then options.style="flat" end
+    if type(options.styleColors)~="table" then options.styleColors={} end
+    for _,style in ipairs({"flat","wow"}) do
+        if type(options.styleColors[style])~="table" then options.styleColors[style]={} end
+    end
+    -- Keep existing colors on the active style when upgrading from shared colors.
+    local profile=self:StyleColors()
+    for _,key in ipairs({"backgroundColor","accentColor"}) do
+        if profile[key]==nil and type(options[key])=="table" then profile[key]=Copy(options[key]) end
+        options[key]=nil
     end
     database.selected = math.max(1, math.min(database.selected or 1, #database.pages))
     for _, page in ipairs(database.pages) do

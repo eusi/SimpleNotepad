@@ -28,16 +28,13 @@ function skin:Paint(texture,color)
         -- The native materials are already dark. Lift the tint so their grain
         -- remains visible instead of multiplying it by a near-black flat color.
         texture:SetVertexColor(math.min(1,color[1]*2+0.45),math.min(1,color[2]*2+0.45),math.min(1,color[3]*2+0.45))
-        if self.lightBackground then
-            if not fill.base then
-                fill.base=fill.parent:CreateTexture(nil,"BACKGROUND",nil,-1)
-                fill.base:SetAllPoints(texture)
-            end
-            platform:Color(fill.base,color); fill.base:Show(); texture:SetAlpha(0.25)
-        else
-            if fill.base then fill.base:Hide() end
-            texture:SetAlpha(1)
+        -- Native materials contain transparent pixels; always back them with color.
+        if not fill.base then
+            fill.base=fill.parent:CreateTexture(nil,"BACKGROUND",nil,-1)
+            fill.base:SetAllPoints(texture)
         end
+        platform:Color(fill.base,color); fill.base:Show()
+        texture:SetAlpha(self.lightBackground and 0.25 or 1)
     else
         if fill and fill.base then fill.base:Hide() end
         texture:SetAlpha(1)
@@ -57,7 +54,9 @@ function skin:Configure(options)
     for key,color in pairs(defaults) do
         for index=1,3 do self.colors[key][index]=color[index] end
     end
-    local background=options.backgroundColor or (options.style == "wow" and {0.12,0.105,0.08})
+    local profile=options.styleColors and options.styleColors[options.style] or {}
+    local shade=(self.wow and 72 or 24)/255
+    local background=profile.backgroundColor or {shade,shade,shade}
     if background then
         local offsets={editor=0,toolbar=0.045,rail=-0.01,tab=0.02,selected=0.095,border=0.16,button=0.015,hover=0.10,active=0.07}
         for key,offset in pairs(offsets) do
@@ -70,7 +69,7 @@ function skin:Configure(options)
             self.colors.muted[1],self.colors.muted[2],self.colors.muted[3]=0.25,0.25,0.25
         end
     end
-    local accent=options.accentColor or (options.style == "wow" and {1,0.82,0})
+    local accent=profile.accentColor or {0,238/255,1}
     if accent then for index=1,3 do self.colors.blue[index]=accent[index] end end
     for _,fill in ipairs(fills) do self:Paint(fill.texture,fill.color) end
     for _,edge in ipairs(bevels) do edge:SetShown(self.wow) end
@@ -111,6 +110,7 @@ end
 function skin:Button(parent, icon, tooltip, callback, width)
     local button = CreateFrame("Button", nil, parent)
     button.plain=icon ~= nil
+    button.settings=parent.settingsCard
     button:SetSize(width or (icon and 18 or 28),icon and 18 or 28)
     button.fill = self:Fill(button, self.colors.button)
     if button.plain then button.fill:Hide() end
@@ -143,6 +143,7 @@ function skin:Button(parent, icon, tooltip, callback, width)
         GameTooltip:Hide()
     end)
     button:SetScript("OnClick", callback)
+    if button.settings then self:ButtonState(button) end
     return button
 end
 
@@ -150,6 +151,14 @@ function skin:ButtonState(button)
     if button.plain then
         button.fill:Hide()
         button.icon:SetVertexColor(unpack((button.active or button.hovered) and self.colors.blue or self.colors.text))
+    elseif button.settings then
+        local color=button.hovered and self.colors.hover or button.active and self.colors.active or self.colors.button
+        if not self.wow then
+            local offset=(button.hovered and 0.20 or button.active and 0.16 or 0.12)*(self.lightBackground and -1 or 1)
+            color={}
+            for index=1,3 do color[index]=math.max(0,math.min(1,self.colors.editor[index]+offset)) end
+        end
+        self:Paint(button.fill,color)
     end
 end
 

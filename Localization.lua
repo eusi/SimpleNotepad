@@ -170,6 +170,12 @@ local sharingTranslations = {
 sharingTranslations.esMX = sharingTranslations.esES
 local sharing = sharingTranslations[language]
 for index, key in ipairs(sharingKeys) do strings[key] = sharing and sharing[index] or key end
+local authorTranslations = {
+    deDE="von %s", frFR="par %s", esES="por %s", esMX="por %s",
+    ptBR="por %s", itIT="di %s", ruRU="Автор: %s", koKR="제작: %s",
+    zhCN="作者：%s", zhTW="作者：%s",
+}
+strings["by %s"] = authorTranslations[language] or "by %s"
 app.L = strings
 
 local folded = {}

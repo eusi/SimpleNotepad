@@ -1,6 +1,8 @@
 local addonName, app = ...
 local platform = {}
 app.platform = platform
+local metadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+app.version = metadata and metadata(addonName,"Version") or ""
 -- Both the minimap launcher and the minimized window use this same artwork.
 app.iconTexture = "Interface\\AddOns\\"..addonName.."\\Media\\logo.tga"
 

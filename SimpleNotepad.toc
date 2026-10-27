@@ -7,7 +7,17 @@
 ## Title: SimpleNotepad
 ## Author: sAks
 ## Notes: A simple in-game notepad for World of Warcraft.
-## Version: 0.3.0
+## Notes-deDE: Ein einfacher Notizblock für World of Warcraft.
+## Notes-frFR: Un bloc-notes simple pour World of Warcraft.
+## Notes-esES: Un bloc de notas sencillo para World of Warcraft.
+## Notes-esMX: Un bloc de notas sencillo para World of Warcraft.
+## Notes-ptBR: Um bloco de notas simples para World of Warcraft.
+## Notes-itIT: Un semplice blocco note per World of Warcraft.
+## Notes-ruRU: Простой блокнот для World of Warcraft.
+## Notes-koKR: 월드 오브 워크래프트용 간편한 메모장입니다.
+## Notes-zhCN: 一个简洁的魔兽世界游戏内记事本。
+## Notes-zhTW: 一個簡潔的魔獸世界遊戲內記事本。
+## Version: 0.4.0
 ## SavedVariables: SimpleNotepad_DB
 ## SavedVariablesPerCharacter: SimpleNotepad_CharacterDB
 ## IconTexture: Interface\AddOns\SimpleNotepad\Media\logo.tga

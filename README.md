@@ -33,9 +33,9 @@ An in-game notepad for notes, reminders, and useful links.
 ## Settings
 
 - **Style:** Modern or WoW.
-- **Colors:** Custom background and accent colors; reset available.
+- **Colors:** Custom background and accent colors for each style; reset available.
 - **Opacity:** 10-100%; default **90%**.
-- **Scale:** 65-150%.
+- **Scale:** 65-150%; default **100%**.
 - **Window lock:** Lock window position, size, and minimized button.
 - **Auto-hide:** Hide toolbar and tabs; hover at the top to reveal them.
 - **Minimap icon:** Show/hide.

@@ -612,7 +612,8 @@ function view:BuildSettings()
     local settingsScroll=skin:ScrollFrame(self.preferences)
     self.settingsScroll=settingsScroll
     settingsScroll:SetPoint("TOPLEFT",24,-16); settingsScroll:SetPoint("BOTTOMRIGHT",-30,16)
-    local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,400)
+    local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,430)
+    card.settingsCard=true
     settingsScroll:SetScrollChild(card)
     local title=skin:Label(card,L["Settings"]); title:SetPoint("TOPLEFT",0,0)
     local function slider(caption,value,low,high,offset,callback)
@@ -658,31 +659,35 @@ function view:BuildSettings()
     self.lockButton:SetPoint("TOPLEFT",0,-215)
     self.lockButton.label=skin:Label(self.lockButton,""); self.lockButton.label:SetPoint("CENTER")
     self.styleButton=skin:Button(card,nil,nil,function()
+        if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
         self.options.style=self.options.style == "wow" and "flat" or "wow"
         self:ApplyStyle()
     end,260)
     self.styleButton:SetPoint("TOPLEFT",0,-250)
     self.styleButton.label=skin:Label(self.styleButton,""); self.styleButton.label:SetPoint("CENTER")
-    local background=skin:Button(card,nil,nil,function() self:ChooseColor("backgroundColor",skin.colors.editor) end,260)
-    background:SetPoint("TOPLEFT",0,-285); skin:Label(background,L["Background color"]):SetPoint("CENTER")
-    local accent=skin:Button(card,nil,nil,function() self:ChooseColor("accentColor",skin.colors.blue) end,260)
-    accent:SetPoint("TOPLEFT",0,-320); skin:Label(accent,L["Accent color"]):SetPoint("CENTER")
+    local background=skin:Button(card,nil,nil,function() self:ChooseColor("backgroundColor",skin.colors.editor) end,244)
+    background:SetPoint("TOPLEFT",16,-285); skin:Label(background,L["Background color"]):SetPoint("CENTER")
+    local accent=skin:Button(card,nil,nil,function() self:ChooseColor("accentColor",skin.colors.blue) end,244)
+    accent:SetPoint("TOPLEFT",16,-320); skin:Label(accent,L["Accent color"]):SetPoint("CENTER")
     local reset=skin:Button(card,nil,nil,function()
         if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
-        self.options.style="flat"; self.options.backgroundColor=nil; self.options.accentColor=nil
+        self.options.style="flat"; self.options.styleColors={flat={},wow={}}
         self:ApplyStyle()
     end,260)
     reset:SetPoint("TOPLEFT",0,-355); skin:Label(reset,L["Reset appearance"]):SetPoint("CENTER")
+    local about=skin:Label(card,"SimpleNotepad "..app.version.." "..string.format(L["by %s"],"sAks"),true)
+    about:SetPoint("TOPLEFT",0,-400); about:SetSize(260,16); about:SetJustifyH("CENTER")
     self.preferences:Hide()
 end
 
 function view:ChooseColor(key, fallback)
-    local original=self.options[key]
+    local profile=book:StyleColors()
+    local original=profile[key]
     local color=original or fallback
     app.platform:ChooseColor(color,function(r,g,b)
-        self.options[key]={r,g,b}; self:ApplyStyle()
+        profile[key]={r,g,b}; self:ApplyStyle()
     end,function()
-        self.options[key]=original; self:ApplyStyle()
+        profile[key]=original; self:ApplyStyle()
     end)
 end
 
@@ -696,6 +701,14 @@ function view:ApplyStyle()
     if self.scaleSlider then self.scaleSlider:GetThumbTexture():SetVertexColor(unpack(skin.colors.blue)) end
     if self.autoButton then skin:Paint(self.autoButton.fill,self.options.autoHide and skin.colors.active or skin.colors.button) end
     if self.root then
+        if not self.frameBackground then
+            self.frameBackground=self.root:CreateTexture(nil,"BACKGROUND",nil,-2)
+            self.frameBackground:SetPoint("TOPLEFT",6,-6)
+            self.frameBackground:SetPoint("BOTTOMRIGHT",-6,6)
+        end
+        -- Fill the frame's inner margin as well as the inset content area.
+        app.platform:Color(self.frameBackground,skin.colors.editor)
+        self.frameBackground:SetShown(self.options.style == "wow")
         if not self.border then
             self.border=CreateFrame("Frame",nil,self.root,BackdropTemplateMixin and "BackdropTemplate" or nil)
             self.border:SetAllPoints(); self.border:EnableMouse(false)
