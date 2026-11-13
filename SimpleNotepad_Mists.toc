@@ -12,7 +12,7 @@
 ## Notes-koKR: 월드 오브 워크래프트용 간편한 메모장입니다.
 ## Notes-zhCN: 一个简洁的魔兽世界游戏内记事本。
 ## Notes-zhTW: 一個簡潔的魔獸世界遊戲內記事本。
-## Version: 0.4.0
+## Version: 0.5.0
 ## SavedVariables: SimpleNotepad_DB
 ## SavedVariablesPerCharacter: SimpleNotepad_CharacterDB
 ## IconTexture: Interface\AddOns\SimpleNotepad\Media\logo.tga
@@ -20,6 +20,8 @@
 Localization.lua
 Platform.lua
 Notebook.lua
+Sharing.lua
 Appearance.lua
 Window.lua
+SharingWindow.lua
 Startup.lua

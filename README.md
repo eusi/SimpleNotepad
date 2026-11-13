@@ -19,6 +19,7 @@ An in-game notepad for notes, reminders, and useful links.
 
 - Named notes with tabs and previous/next navigation.
 - Character-only notes by default, global notes via globe toggle.
+- Share notes with party and raid members, with a preview and accept/reject controls.
 - Reopen, rename, or delete notes through the all-notes list.
 - Close tabs without deleting notes; new and reopened tabs appear last.
 - Long-press and drag tabs to sort them.
@@ -52,6 +53,14 @@ An in-game notepad for notes, reminders, and useful links.
 - **Escape:** Close search / cancel dialog / release text focus.
 - **+**: Create a named note.
 
+## Sharing notes
+
+Both players need SimpleNotepad 0.5.0 or newer and must be in the same party or raid. Open Sharing with the chain-link button.
+
+1. **Recipient:** Open **Receive** and click **Start receiving** before the note is sent.
+2. **Sender:** Open **Send**, select a note, and send it to the group.
+3. **Recipient:** Preview the note and choose **Accept** to save a copy or **Reject** to discard it.
+
 ## Storage
 
 - Notes, open tabs, and the selected note are saved per character.
@@ -60,3 +69,6 @@ An in-game notepad for notes, reminders, and useful links.
 - Existing shared notes are imported once for each character; the original shared copy is preserved.
 - Appearance settings remain shared across characters on the same account and client.
 - Saved on logout or `/reload`; undo/redo lasts for the current session.
+
+Cheers,
+sAks/eusi

@@ -150,7 +150,7 @@ end
 function skin:ButtonState(button)
     if button.plain then
         button.fill:Hide()
-        button.icon:SetVertexColor(unpack((button.active or button.hovered) and self.colors.blue or self.colors.text))
+        button.icon:SetVertexColor(unpack(button.iconColor or ((button.active or button.hovered) and self.colors.blue or self.colors.text)))
     elseif button.settings then
         local color=button.hovered and self.colors.hover or button.active and self.colors.active or self.colors.button
         if not self.wow then

@@ -9,10 +9,14 @@ local boot = CreateFrame("Frame")
 boot:RegisterEvent("ADDON_LOADED")
 boot:SetScript("OnEvent", function(_, _, name)
     if name ~= addonName then return end
-    if type(SimpleNotepad_DB) ~= "table" then SimpleNotepad_DB = {} end
-    if type(SimpleNotepad_CharacterDB) ~= "table" then SimpleNotepad_CharacterDB = {} end
-    app.journal:LoadCharacter(SimpleNotepad_DB, SimpleNotepad_CharacterDB)
+    local accountKey=app.devPreview and "SimpleNotepad_DevDB" or "SimpleNotepad_DB"
+    local characterKey=app.devPreview and "SimpleNotepad_DevCharacterDB" or "SimpleNotepad_CharacterDB"
+    if type(_G[accountKey]) ~= "table" then _G[accountKey] = {} end
+    if type(_G[characterKey]) ~= "table" then _G[characterKey] = {} end
+    if app.PrepareDevData then app:PrepareDevData(_G[accountKey],_G[characterKey]) end
+    app.journal:LoadCharacter(_G[accountKey], _G[characterKey])
     app:BuildWindow()
+    if app.sharing then app.sharing:Start() end
     -- The minimap itself clips children to its mask on Retail. Keep the launcher
     -- outside that mask and explicitly above the minimap artwork.
     local launcher = CreateFrame("Button", "SimpleNotepadMinimapButton", MinimapCluster or UIParent)
@@ -29,13 +33,31 @@ boot:SetScript("OnEvent", function(_, _, name)
     local border=launcher:CreateTexture(nil,"OVERLAY")
     border:SetSize(54,54); border:SetPoint("TOPLEFT")
     border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    local lastWidth,lastHeight,lastShape,lastScale,lastLauncherScale
     local function position()
-        local angle=math.rad(app.journal.data.options.minimapAngle or 225)
-        local radius=Minimap:GetWidth()/2+8
+        local shape=GetMinimapShape and GetMinimapShape() or "ROUND"
+        local width,height=Minimap:GetWidth(),Minimap:GetHeight()
+        local mapScale,buttonScale=Minimap:GetEffectiveScale(),launcher:GetEffectiveScale()
+        -- The launcher lives outside the map's clipping/scaling hierarchy.
+        -- Express the map's displayed size in the launcher's coordinate space.
+        local scale=mapScale/buttonScale
+        local x,y=app.platform:MinimapOffset(app.journal.data.options.minimapAngle or 225,width*scale,height*scale,shape)
+        lastWidth,lastHeight,lastShape,lastScale,lastLauncherScale=width,height,shape,mapScale,buttonScale
         launcher:ClearAllPoints()
-        launcher:SetPoint("CENTER",Minimap,"CENTER",math.cos(angle)*radius,math.sin(angle)*radius)
+        launcher:SetPoint("CENTER",Minimap,"CENTER",x,y)
+    end
+    app.PositionMinimapButton=position
+    local poll=0
+    local function watch(_,elapsed)
+        poll=poll+elapsed
+        if poll<0.5 then return end
+        poll=0
+        local shape=GetMinimapShape and GetMinimapShape() or "ROUND"
+        if lastWidth~=Minimap:GetWidth() or lastHeight~=Minimap:GetHeight() or lastShape~=shape
+            or lastScale~=Minimap:GetEffectiveScale() or lastLauncherScale~=launcher:GetEffectiveScale() then position() end
     end
     position()
+    launcher:SetScript("OnUpdate",watch)
     launcher:RegisterForDrag("LeftButton")
     launcher:SetScript("OnMouseDown",function(button) button.dragged=nil end)
     launcher:SetScript("OnDragStart",function(button)
@@ -47,7 +69,7 @@ boot:SetScript("OnEvent", function(_, _, name)
             position()
         end)
     end)
-    launcher:SetScript("OnDragStop",function(button) button:SetScript("OnUpdate",nil) end)
+    launcher:SetScript("OnDragStop",function(button) button:SetScript("OnUpdate",watch); position() end)
     launcher:SetScript("OnClick", function(button)
         if not button.dragged then app:Toggle() end
         button.dragged=nil
@@ -62,6 +84,7 @@ boot:SetScript("OnEvent", function(_, _, name)
     SLASH_SIMPLENOTEPAD2 = "/simplenotepad"
     SLASH_SIMPLENOTEPAD3 = "/sn"
     SlashCmdList.SIMPLENOTEPAD = function(message)
+        message=(message or ""):lower():match("^%s*(.-)%s*$")
         if message == "search" then app:Search() else app:Toggle() end
     end
     boot:UnregisterEvent("ADDON_LOADED")

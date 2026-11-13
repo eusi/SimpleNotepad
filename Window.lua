@@ -2,6 +2,7 @@ local _, app = ...
 local L = app.L
 local book, skin = app.journal, app.skin
 local view = {mode = "note", tabButtons = {}, rows = {}, headerProgress = 1, fade = 1}
+app.view = view
 local HEADER_HEIGHT, TAB_HEIGHT, MIN_HEIGHT = 28, 22, 96
 
 local function strip(text) return text:match("^%s*(.-)%s*$") end
@@ -20,18 +21,69 @@ function view:Select(index)
 end
 
 function view:Refresh()
+    local wasWriting=self.writing
+    self.writing=true
+    local page=book:Current()
+    local body=page.body
+    local reenteringNote=self.mode=="note" and self.renderedMode~="note"
+    if self.mode~="sharing" and self.previewNote then self:PreviewIncoming(nil) end
     -- Keep settings usable after reducing the notebook to a single text line.
-    if self.mode == "settings" and self.root:GetHeight() < 300 then
-        self.noteHeight = self.root:GetHeight(); self.root:SetHeight(300)
-    elseif self.mode ~= "settings" and self.noteHeight then
+    -- Capture before SetWidth can synchronously trigger Layout and grow height.
+    if self.mode=="sharing" and self.root:GetHeight()<400 then
+        self.noteHeight=self.noteHeight or self.root:GetHeight()
+    end
+    if self.mode~="sharing" and self.noteWidth then
+        local width=self.noteWidth; self.noteWidth=nil; self.root:SetWidth(width)
+    elseif self.mode=="sharing" and self.root:GetWidth()<(self.sharingMinimumWidth or 560) then
+        self.noteWidth=self.noteWidth or self.root:GetWidth(); self.root:SetWidth(self.sharingMinimumWidth or 560)
+    end
+    local minimum=self.mode=="sharing" and self:SharingMinimumHeight() or 300
+    if self.mode ~= "note" and self.root:GetHeight() < minimum then
+        self.noteHeight = self.noteHeight or self.root:GetHeight(); self.root:SetHeight(minimum)
+    elseif self.mode == "note" and self.noteHeight then
         local height = self.noteHeight; self.noteHeight = nil; self.root:SetHeight(height)
     end
-    self.writing = true
-    self.editor:SetText(book:Current().body)
-    self.writing = false
     show(self.editorScroll, self.mode == "note")
     show(self.preferences, self.mode == "settings")
+    if self.sharingPanel then show(self.sharingPanel,self.mode == "sharing") end
+    if self.durationMenu and self.mode~="sharing" then self.durationMenu:Hide() end
+    self.editorPage=self.mode=="note" and page or nil
+    -- Populate only after showing and sizing the editor. Hidden multiline
+    -- edit boxes can emit non-user changes while their layout is rebuilt.
+    if self.mode=="note" then
+        self:PopulateEditor(body,reenteringNote)
+        if reenteringNote then self.pendingEditorRefresh={page=page,body=body} end
+    else self.pendingEditorRefresh=nil end
     self:Tabs(); self:List()
+    if self.mode=="sharing" and app.SharingChanged then app:SharingChanged() end
+    self.renderedMode=self.mode
+    self.writing=wasWriting
+end
+
+function view:PopulateEditor(body,rebuild)
+    local wasWriting=self.writing; self.writing=true
+    if rebuild then
+        -- Rebind the native scroll child and invalidate the multiline render
+        -- cache; SetText with an unchanged string can leave it visually empty.
+        self.editorScroll:Hide(); self.editor:Hide()
+        self.editorScroll:Show(); self.editor:Show()
+        self.editorScroll:SetScrollChild(self.editor)
+        self.editor:SetWidth(math.max(1,self.editorScroll:GetWidth()))
+        self.editor:SetText("")
+    end
+    self.editor:SetText(body)
+    if rebuild then
+        self.editorScroll:SetVerticalScroll(0); self.editor:SetCursorPosition(0)
+        self.editorScroll:UpdateScrollBar()
+    end
+    self.writing=wasWriting
+end
+
+function app:CommitNoteInput(editor)
+    if editor==view.editor and not view.writing and view.mode=="note" and view.editorPage==book:Current() then
+        book:Record(editor:GetText())
+        view.pendingEditorRefresh=nil
+    end
 end
 
 function view:CommitRename(cancel)
@@ -209,6 +261,13 @@ function view:Tabs()
         if self.mode == "settings" then selectedOffset,selectedWidth = offset,tabWidth end
         offset = offset+tabWidth+1
     end
+    if self.sharingTab then
+        local tabWidth=self:PlaceSharingTab(offset)
+        if tabWidth then
+            if self.mode=="sharing" then selectedOffset,selectedWidth=offset,tabWidth end
+            offset=offset+tabWidth+1
+        end
+    end
     self.tabCanvas:SetWidth(math.max(1,offset))
     local width = self.tabScroll:GetWidth()
     local current = self.tabScroll:GetHorizontalScroll()
@@ -318,8 +377,17 @@ function view:Layout()
     self.content:ClearAllPoints()
     self.content:SetPoint("TOPLEFT",self.root,"TOPLEFT",inset,-inset)
     self.content:SetPoint("BOTTOMRIGHT",self.root,"BOTTOMRIGHT",-inset,inset)
-    app.platform:ResizeBounds(self.root,360,MIN_HEIGHT+2*inset)
-    if self.root:GetHeight() < MIN_HEIGHT+2*inset then self.root:SetHeight(MIN_HEIGHT+2*inset) end
+    local minimum=self.mode=="sharing" and self:SharingMinimumHeight() or MIN_HEIGHT+2*inset
+    if self.mode=="sharing" and self.root:GetHeight()<minimum then
+        self.noteHeight=self.noteHeight or self.root:GetHeight()
+    end
+    local minimumWidth=self.mode=="sharing" and (self.sharingMinimumWidth or 560) or 360
+    app.platform:ResizeBounds(self.root,minimumWidth,minimum)
+    if self.root:GetWidth()<minimumWidth then
+        if self.mode=="sharing" then self.noteWidth=self.noteWidth or self.root:GetWidth() end
+        self.root:SetWidth(minimumWidth)
+    end
+    if self.root:GetHeight() < minimum then self.root:SetHeight(minimum) end
     local toolbarHeight = 5+(HEADER_HEIGHT-5)*self.headerProgress
     self.header:SetAlpha(self.headerProgress)
     show(self.header,self.headerProgress > 0.01)
@@ -339,6 +407,7 @@ function view:Layout()
     if self.tabCanvas then self:Tabs() end
     skin:ResizeTextures()
     skin:ButtonState(self.autoButton)
+    if self.LayoutSharing then self:LayoutSharing() end
 end
 
 function view:ApplyOpacity()
@@ -369,7 +438,7 @@ function view:SaveBounds()
     local x,y = self.root:GetCenter()
     local cx,cy = UIParent:GetCenter()
     self.options.x,self.options.y = x*scale-cx,y*scale-cy
-    self.options.width=self.root:GetWidth()
+    self.options.width=self.noteWidth or self.root:GetWidth()
     self.options.height=self.noteHeight or self.root:GetHeight()
 end
 
@@ -417,6 +486,14 @@ function view:Animate(opening, minimized)
 end
 
 function view:Tick(elapsed)
+    local pending=self.pendingEditorRefresh
+    if pending then
+        self.pendingEditorRefresh=nil
+        if self.mode=="note" and self.editorPage==pending.page and book:Current()==pending.page and pending.page.body==pending.body
+            and not self.editor:HasFocus() and not self.searchPanel:IsShown() then
+            self:PopulateEditor(pending.body,true)
+        end
+    end
     self:UpdateTabDrag(elapsed)
     if self.noticeTime then
         self.noticeTime = self.noticeTime-elapsed
@@ -478,6 +555,12 @@ function view:BuildHeader()
     self.searchButton = left("search",L["Search notes"],84,function() self:Search() end)
     self.undo = left("undo",L["Undo (Ctrl+Z)"],110,function() if self.mode == "note" then book:Restore(-1); self:Refresh() end end)
     self.redo = left("redo",L["Redo (Ctrl+Y)"],136,function() if self.mode == "note" then book:Restore(1); self:Refresh() end end)
+    if app.sharing then
+        self.shareButton=left("link",L["Sharing: Send / receive notes"],162,function() self:Sharing() end)
+        self.shareButton.iconColor={1,1,1}; skin:ButtonState(self.shareButton)
+        self.shareCount=skin:Label(self.shareButton,"")
+        self.shareCount:SetPoint("BOTTOMRIGHT",4,-4)
+    end
     local function right(icon,tip,offset,callback)
         local button = skin:Button(header,icon,tip,callback); button:SetPoint("RIGHT",offset,0); return button
     end
@@ -538,10 +621,12 @@ function view:BuildEditor()
         editor:SetFocus(); editor:SetCursorPosition(#editor:GetText())
     end)
     self.editorScroll:HookScript("OnSizeChanged",function(_,width) editor:SetWidth(math.max(1,width)) end)
-    editor:SetScript("OnTextChanged",function(frame) if not self.writing then book:Record(frame:GetText()) end end)
+    editor:SetScript("OnTextChanged",function(frame,userInput)
+        if userInput~=false then app:CommitNoteInput(frame) end
+    end)
     editor:SetScript("OnMouseDown",function() self:CloseSearch(); self.picker:Hide(); self:CommitRename() end)
     editor:SetScript("OnEscapePressed",function(frame) frame:ClearFocus() end)
-    editor:SetScript("OnTabPressed",function(frame) frame:Insert("    ") end)
+    editor:SetScript("OnTabPressed",function(frame) frame:Insert("    "); app:CommitNoteInput(frame) end)
     editor:SetScript("OnKeyDown",function(_,key)
         if not IsControlKeyDown() then return end
         if key=="Z" then book:Restore(-1); self:Refresh()
@@ -613,6 +698,7 @@ function view:BuildSettings()
     self.settingsScroll=settingsScroll
     settingsScroll:SetPoint("TOPLEFT",24,-16); settingsScroll:SetPoint("BOTTOMRIGHT",-30,16)
     local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,430)
+    self.settingsCard=card
     card.settingsCard=true
     settingsScroll:SetScrollChild(card)
     local title=skin:Label(card,L["Settings"]); title:SetPoint("TOPLEFT",0,0)
@@ -693,8 +779,10 @@ end
 
 function view:ApplyStyle()
     skin:Configure(self.options)
+    if self.shareCount then self.shareCount:SetTextColor(unpack(skin.colors.blue)) end
     if self.styleButton then self.styleButton.label:SetText(self.options.style == "wow" and L["Style: WoW"] or L["Style: modern"]) end
     if self.editor then self.editor:SetTextColor(unpack(skin.colors.text)) end
+    if self.preview then self.preview:SetTextColor(unpack(skin.colors.text)) end
     if self.search then self.search:SetTextColor(unpack(skin.colors.text)) end
     if self.rename then self.rename:SetTextColor(unpack(skin.colors.text)) end
     if self.opacitySlider then self.opacitySlider:GetThumbTexture():SetVertexColor(unpack(skin.colors.blue)) end
@@ -731,7 +819,7 @@ function app:BuildWindow()
     view.root=CreateFrame("Frame",nil,UIParent)
     -- A failed build must never leave a visible frame intercepting mouse input.
     view.root:Hide()
-    view.root:SetSize(math.max(360,view.options.width or 680),math.max(MIN_HEIGHT,view.options.height or 450))
+    view.root:SetSize(math.max(360,view.options.width or 560),math.max(MIN_HEIGHT,view.options.height or 360))
     view.root:SetScale(view.options.scale)
     view.root:SetPoint("CENTER",UIParent,"CENTER",(view.options.x or 0)/view.options.scale,(view.options.y or 0)/view.options.scale)
     view.root:SetFrameStrata("DIALOG"); view.root:SetClampedToScreen(true)
@@ -742,6 +830,7 @@ function app:BuildWindow()
     app.platform:Clip(view.content)
     view.backgroundFill=skin:Fill(view.content,skin.colors.editor)
     view:BuildHeader(); view:BuildTabs(); view:BuildEditor(); view:BuildPopovers(); view:BuildSettings()
+    if self.BuildSharingWindow then self:BuildSharingWindow() end
     view.badge=skin:Button(UIParent,nil,L["Restore SimpleNotepad"],function()
         if not view.badge.dragged then view:Animate(true) end
         view.badge.dragged=nil
@@ -768,7 +857,7 @@ function app:BuildWindow()
     grip:SetHeight(14); grip.icon:SetSize(12,12); grip:SetPoint("BOTTOMRIGHT",-4,4)
     grip:SetScript("OnMouseDown",function()
         if not view.animation and not view.options.locked then
-            view.noteHeight=nil; view.root:StartSizing("BOTTOMRIGHT")
+            view.noteHeight=nil; view.noteWidth=nil; view.root:StartSizing("BOTTOMRIGHT")
         end
     end)
     grip:SetScript("OnMouseUp",function() view:SaveBounds() end)
