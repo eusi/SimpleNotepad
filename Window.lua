@@ -3,7 +3,7 @@ local L = app.L
 local book, skin = app.journal, app.skin
 local view = {mode = "note", tabButtons = {}, rows = {}, headerProgress = 1, fade = 1}
 app.view = view
-local HEADER_HEIGHT, TAB_HEIGHT, MIN_HEIGHT = 28, 22, 96
+local HEADER_HEIGHT, TAB_HEIGHT, MIN_WIDTH, MIN_HEIGHT = 28, 22, 160, 80
 
 local function strip(text) return text:match("^%s*(.-)%s*$") end
 local function show(frame, visible) frame:SetShown(visible) end
@@ -21,31 +21,20 @@ function view:Select(index)
 end
 
 function view:Refresh()
+    if self.textPalette then self.textPalette:Hide() end
+    self.colorSelection=nil
     local wasWriting=self.writing
     self.writing=true
     local page=book:Current()
     local body=page.body
     local reenteringNote=self.mode=="note" and self.renderedMode~="note"
     if self.mode~="sharing" and self.previewNote then self:PreviewIncoming(nil) end
-    -- Keep settings usable after reducing the notebook to a single text line.
-    -- Capture before SetWidth can synchronously trigger Layout and grow height.
-    if self.mode=="sharing" and self.root:GetHeight()<400 then
-        self.noteHeight=self.noteHeight or self.root:GetHeight()
-    end
-    if self.mode~="sharing" and self.noteWidth then
-        local width=self.noteWidth; self.noteWidth=nil; self.root:SetWidth(width)
-    elseif self.mode=="sharing" and self.root:GetWidth()<(self.sharingMinimumWidth or 560) then
-        self.noteWidth=self.noteWidth or self.root:GetWidth(); self.root:SetWidth(self.sharingMinimumWidth or 560)
-    end
-    local minimum=self.mode=="sharing" and self:SharingMinimumHeight() or 300
-    if self.mode ~= "note" and self.root:GetHeight() < minimum then
-        self.noteHeight = self.noteHeight or self.root:GetHeight(); self.root:SetHeight(minimum)
-    elseif self.mode == "note" and self.noteHeight then
-        local height = self.noteHeight; self.noteHeight = nil; self.root:SetHeight(height)
-    end
     show(self.editorScroll, self.mode == "note")
     show(self.preferences, self.mode == "settings")
-    if self.sharingPanel then show(self.sharingPanel,self.mode == "sharing") end
+    if self.sharingViewport then
+        show(self.sharingViewport,self.mode == "sharing")
+        show(self.sharingSubBar,self.mode == "sharing")
+    end
     if self.durationMenu and self.mode~="sharing" then self.durationMenu:Hide() end
     self.editorPage=self.mode=="note" and page or nil
     -- Populate only after showing and sizing the editor. Hidden multiline
@@ -81,6 +70,14 @@ end
 
 function app:CommitNoteInput(editor)
     if editor==view.editor and not view.writing and view.mode=="note" and view.editorPage==book:Current() then
+        if view.bulletEnter and view.options.automaticBullets then
+            local newlinePosition=view.bulletEnter
+            view.bulletEnter=nil
+            local text,cursor=app.formatting:ContinueBullet(book:Current().body,editor:GetText(),newlinePosition)
+            if text then
+                view.writing=true; editor:SetText(text); editor:SetCursorPosition(cursor); view.writing=false
+            end
+        end
         book:Record(editor:GetText())
         view.pendingEditorRefresh=nil
     end
@@ -130,6 +127,7 @@ function view:Settings()
 end
 
 function view:Search()
+    if self.textPalette then self.textPalette:Hide() end
     if not self.root:IsShown() or (self.animation and not self.animation.opening) then self:Animate(true) end
     self.headerProgress = 1; self.idle = 0; self:Layout()
     self.picker:Hide()
@@ -377,14 +375,10 @@ function view:Layout()
     self.content:ClearAllPoints()
     self.content:SetPoint("TOPLEFT",self.root,"TOPLEFT",inset,-inset)
     self.content:SetPoint("BOTTOMRIGHT",self.root,"BOTTOMRIGHT",-inset,inset)
-    local minimum=self.mode=="sharing" and self:SharingMinimumHeight() or MIN_HEIGHT+2*inset
-    if self.mode=="sharing" and self.root:GetHeight()<minimum then
-        self.noteHeight=self.noteHeight or self.root:GetHeight()
-    end
-    local minimumWidth=self.mode=="sharing" and (self.sharingMinimumWidth or 560) or 360
+    local minimum=MIN_HEIGHT+2*inset
+    local minimumWidth=MIN_WIDTH+2*inset
     app.platform:ResizeBounds(self.root,minimumWidth,minimum)
     if self.root:GetWidth()<minimumWidth then
-        if self.mode=="sharing" then self.noteWidth=self.noteWidth or self.root:GetWidth() end
         self.root:SetWidth(minimumWidth)
     end
     if self.root:GetHeight() < minimum then self.root:SetHeight(minimum) end
@@ -401,8 +395,11 @@ function view:Layout()
     show(self.rail,self.headerProgress > 0.01)
     show(self.reveal,self.options.autoHide)
     local width = self.root:GetWidth()-2*inset
-    show(self.undo,width >= 300); show(self.redo,width >= 326)
+    self:LayoutToolbar(width)
     self.tabScroll:SetWidth(math.max(1,width-28))
+    if self.editorScroll then
+        self.editorScroll:SetPoint("BOTTOMRIGHT",-24,self.content:GetHeight()<96 and 8 or 20)
+    end
     if self.editor then self.editor:SetWidth(math.max(1,self.editorScroll:GetWidth())) end
     if self.tabCanvas then self:Tabs() end
     skin:ResizeTextures()
@@ -438,11 +435,12 @@ function view:SaveBounds()
     local x,y = self.root:GetCenter()
     local cx,cy = UIParent:GetCenter()
     self.options.x,self.options.y = x*scale-cx,y*scale-cy
-    self.options.width=self.noteWidth or self.root:GetWidth()
-    self.options.height=self.noteHeight or self.root:GetHeight()
+    self.options.width=self.root:GetWidth()
+    self.options.height=self.root:GetHeight()
 end
 
 function view:Animate(opening, minimized)
+    if self.textPalette then self.textPalette:Hide() end
     if self:CommitRename() == false then return end
     self:CloseSearch(); self.picker:Hide(); self.editor:ClearFocus()
     local homeX,homeY=self.options.x or 0,self.options.y or 0
@@ -502,7 +500,7 @@ function view:Tick(elapsed)
     local hovering = (self.header:IsShown() and self.header:IsMouseOver())
         or (self.rail:IsShown() and self.rail:IsMouseOver()) or self.reveal:IsMouseOver()
     local focused = self.search:HasFocus() or self.rename:HasFocus()
-    if hovering or focused or self.tabPress or self.picker:IsShown() or not self.options.autoHide then self.idle = 0
+    if hovering or focused or self.tabPress or self.picker:IsShown() or (self.textPalette and self.textPalette:IsShown()) or not self.options.autoHide then self.idle = 0
     else self.idle = (self.idle or 0)+elapsed end
     local target = self.options.autoHide and (self.idle or 0)>0.45 and 0 or 1
     if self.headerProgress ~= target then
@@ -534,6 +532,149 @@ function view:Tick(elapsed)
 end
 
 -- Toolbar, editor, dialogs and settings.
+function view:CaptureColorSelection()
+    if self.mode~="note" or not self.editor:HasFocus() then return end
+    local editor=self.editor
+    local text,cursor=editor:GetText(),editor:GetCursorPosition()
+    local wasWriting=self.writing
+    self.writing=true
+    -- Empty Insert can be a native no-op. Replace with one temporary byte to
+    -- identify the selection, then restore without recording or saving the probe.
+    editor:Insert(" ")
+    local first,length=editor:GetCursorPosition()-1,#text+1-#editor:GetText()
+    editor:SetText(text); editor:SetCursorPosition(cursor)
+    if length>0 then editor:HighlightText(first,first+length) end
+    self.writing=wasWriting
+    if length>0 then return {page=book:Current(),body=text,first=first,last=first+length} end
+end
+
+function view:ApplyTextColor()
+    local selection=self.colorSelection
+    if self.mode~="note" or not selection or selection.page~=book:Current() or selection.body~=self.editor:GetText() then
+        self.notice:SetText(L["Select text to apply a color."]); self.notice:Show(); self.noticeTime=2.2
+        return
+    end
+    local text,first,last=app.formatting:Color(selection.body,selection.first,selection.last,self.options.textColor)
+    if not first then return end
+    self.writing=true; self.editor:SetText(text); self.editor:SetCursorPosition(last); self.writing=false
+    app:CommitNoteInput(self.editor)
+    self.editor:SetFocus(); self.editor:HighlightText(first,last)
+    self.colorSelection={page=book:Current(),body=text,first=first,last=last}
+end
+
+function view:ToggleBullet()
+    if self.mode~="note" then return end
+    local editor=self.editor
+    local text,cursor=editor:GetText(),editor:GetCursorPosition()
+    local start=cursor-#(text:sub(1,cursor):match("[^\n]*$") or "")
+    local line=text:sub(start+1):match("[^\n]*")
+    local indent=line:match("^[ \t]*")
+    local prefix=line:match("^[ \t]*%-[ \t]+")
+    local position=start+#indent
+    if prefix then
+        text=text:sub(1,position)..text:sub(start+#prefix+1)
+        cursor=math.max(position,cursor-(#prefix-#indent))
+    else
+        text=text:sub(1,position).."- "..text:sub(position+1)
+        cursor=math.max(position,cursor)+2
+        self.options.automaticBullets=true
+        self.bulletButton.label:SetText(L["Automatic bullet lists: on"])
+    end
+    self.writing=true; editor:SetText(text); editor:SetCursorPosition(cursor); self.writing=false
+    app:CommitNoteInput(editor)
+    editor:SetFocus()
+end
+
+function view:BuildTextColors(header)
+    local button=skin:Button(header,nil,L["Text color: left-click to apply, right-click for palette."],function(_,mouseButton)
+        if self.mode~="note" then return end
+        if mouseButton=="RightButton" then
+            show(self.textPalette,not self.textPalette:IsShown())
+        else self.textPalette:Hide(); self:ApplyTextColor() end
+    end,18,true)
+    self.textColorButton=button; button:SetHeight(18); button:SetPoint("LEFT",208,0)
+    button:RegisterForClicks("LeftButtonUp","RightButtonUp")
+    button.fill:Hide()
+    local glyph=skin:Label(button,"A"); glyph:SetPoint("CENTER",0,2)
+    glyph:SetShadowOffset(0,0); glyph:SetShadowColor(0,0,0,0); button.glyph=glyph
+    local stripe=button:CreateTexture(nil,"OVERLAY"); stripe:SetSize(14,2); stripe:SetPoint("BOTTOM",0,3)
+    self.textColorStripe=stripe
+    button:HookScript("OnEnter",function()
+        self.colorSelection=self:CaptureColorSelection()
+    end)
+    button:SetScript("OnMouseDown",function()
+        if self.editor:HasFocus() then self.colorSelection=self:CaptureColorSelection() end
+        self.pendingEditorRefresh=nil
+    end)
+    local palette=CreateFrame("Frame",nil,self.content)
+    self.textPalette=palette
+    palette:SetSize(160,148); palette:SetPoint("TOPRIGHT",button,"BOTTOMRIGHT",0,-4)
+    palette:SetFrameLevel(header:GetFrameLevel()+30); palette:EnableMouse(true)
+    skin:Fill(palette,skin.colors.rail); skin:Outline(palette)
+    skin:Label(palette,L["Text color"]):SetPoint("TOPLEFT",10,-9)
+    self.textSwatches={}
+    for index,hex in ipairs(app.formatting.palette) do
+        local color={tonumber(hex:sub(1,2),16)/255,tonumber(hex:sub(3,4),16)/255,tonumber(hex:sub(5,6),16)/255}
+        local swatch=skin:Button(palette,nil,nil,function()
+            self.options.textColor=hex; self:UpdateTextColor(); palette:Hide()
+            local selection=self.colorSelection
+            if selection and self.mode=="note" and selection.page==book:Current() and selection.body==self.editor:GetText() then
+                self:ApplyTextColor()
+            end
+        end,22)
+        swatch:SetHeight(22); swatch:SetPoint("TOPLEFT",12+((index-1)%5)*28,-30-math.floor((index-1)/5)*28)
+        local fill=swatch:CreateTexture(nil,"ARTWORK"); fill:SetPoint("TOPLEFT",3,-3); fill:SetPoint("BOTTOMRIGHT",-3,3)
+        app.platform:Color(fill,color)
+        swatch.selection=skin:Outline(swatch); swatch.hex=hex
+        self.textSwatches[index]=swatch
+    end
+    self:UpdateTextColor(); palette:Hide()
+end
+
+function view:UpdateTextColor()
+    local hex=self.options.textColor
+    local color={tonumber(hex:sub(1,2),16)/255,tonumber(hex:sub(3,4),16)/255,tonumber(hex:sub(5,6),16)/255}
+    app.platform:Color(self.textColorStripe,color)
+    for _,swatch in ipairs(self.textSwatches) do
+        for _,edge in ipairs(swatch.selection) do app.platform:Color(edge,skin.colors.text); show(edge,swatch.hex==hex) end
+    end
+end
+
+-- Space all neighboring icons evenly and fit separator groups to the available width.
+function view:LayoutToolbar(width)
+    if not self.bulletToolbarButton then return end
+    local navigation=self.options.showNoteNavigation
+    local baseWidth=navigation and 204 or 156
+    local gap=math.max(12,math.min(18,math.floor((width-98-baseWidth)/2)))
+    local x=6
+    local function place(button)
+        if not button then return end
+        button:ClearAllPoints(); button:SetPoint("LEFT",x,0); x=x+24
+    end
+    local function separator(index)
+        x=x-6
+        local line=self.toolbarSeparators[index]
+        line:ClearAllPoints(); line:SetPoint("LEFT",x+gap/2,0)
+        x=x+gap
+    end
+    show(self.previousButton,navigation); show(self.nextButton,navigation)
+    place(self.listButton)
+    if navigation then place(self.previousButton); place(self.nextButton) end
+    place(self.undo); place(self.redo)
+    separator(1); place(self.searchButton); place(self.shareButton)
+    separator(2); place(self.textColorButton); place(self.bulletToolbarButton)
+    local canvasWidth=x-6
+    self.toolbarCanvas:SetWidth(canvasWidth)
+    self.toolbarScroll:SetWidth(math.max(1,width-98))
+    local range=math.max(0,canvasWidth-self.toolbarScroll:GetWidth())
+    self.toolbarScroll:SetHorizontalScroll(math.min(range,self.toolbarScroll:GetHorizontalScroll()))
+    if self.textPalette then
+        self.textPalette:ClearAllPoints()
+        if range>0 then self.textPalette:SetPoint("TOPRIGHT",self.content,"TOPRIGHT",0,-HEADER_HEIGHT)
+        else self.textPalette:SetPoint("TOPRIGHT",self.textColorButton,"BOTTOMRIGHT",0,-4) end
+    end
+end
+
 function view:BuildHeader()
     local header = CreateFrame("Frame",nil,self.content)
     self.header = header; header:SetHeight(HEADER_HEIGHT)
@@ -544,30 +685,63 @@ function view:BuildHeader()
         if not self.animation and not self.options.locked then self.root:StartMoving() end
     end)
     header:SetScript("OnDragStop",function() self:SaveBounds() end)
+    self.toolbarScroll=CreateFrame("ScrollFrame",nil,header)
+    self.toolbarScroll:SetPoint("TOPLEFT"); self.toolbarScroll:SetHeight(HEADER_HEIGHT)
+    self.toolbarCanvas=CreateFrame("Frame",nil,self.toolbarScroll)
+    self.toolbarCanvas:SetSize(1,HEADER_HEIGHT)
+    self.toolbarScroll:SetScrollChild(self.toolbarCanvas)
+    self.toolbarScroll:EnableMouseWheel(true)
+    self.toolbarScroll:SetScript("OnMouseWheel",function(frame,delta)
+        local range=math.max(0,self.toolbarCanvas:GetWidth()-frame:GetWidth())
+        frame:SetHorizontalScroll(math.max(0,math.min(range,frame:GetHorizontalScroll()-delta*48)))
+    end)
+    local tools=self.toolbarCanvas
     local function left(icon,tip,offset,callback)
-        local button=skin:Button(header,icon,tip,callback); button:SetPoint("LEFT",offset,0); return button
+        local button=skin:Button(tools,icon,tip,callback); button:SetPoint("LEFT",offset,0); return button
     end
-    left("list",L["All notes"],6,function()
+    self.listButton=left("list",L["All notes"],6,function()
         self:CloseSearch(); show(self.picker,not self.picker:IsShown())
     end)
-    left("previous",L["Previous note"],32,function() self:Select(book:Neighbor(-1)) end)
-    left("next",L["Next note"],58,function() self:Select(book:Neighbor(1)) end)
-    self.searchButton = left("search",L["Search notes"],84,function() self:Search() end)
-    self.undo = left("undo",L["Undo (Ctrl+Z)"],110,function() if self.mode == "note" then book:Restore(-1); self:Refresh() end end)
-    self.redo = left("redo",L["Redo (Ctrl+Y)"],136,function() if self.mode == "note" then book:Restore(1); self:Refresh() end end)
+    self.previousButton=left("previous",L["Previous note"],30,function() self:Select(book:Neighbor(-1)) end)
+    self.nextButton=left("next",L["Next note"],54,function() self:Select(book:Neighbor(1)) end)
+    self.searchButton = left("search",L["Search notes"],88,function() self:Search() end)
     if app.sharing then
-        self.shareButton=left("link",L["Sharing: Send / receive notes"],162,function() self:Sharing() end)
+        self.shareButton=left("link",L["Sharing: Send / receive notes"],110,function() self:Sharing() end)
         self.shareButton.iconColor={1,1,1}; skin:ButtonState(self.shareButton)
         self.shareCount=skin:Label(self.shareButton,"")
         self.shareCount:SetPoint("BOTTOMRIGHT",4,-4)
+    end
+    self.undo = left("undo",L["Undo (Ctrl+Z)"],148,function() if self.mode == "note" then book:Restore(-1); self:Refresh() end end)
+    self.redo = left("redo",L["Redo (Ctrl+Y)"],170,function() if self.mode == "note" then book:Restore(1); self:Refresh() end end)
+    self:BuildTextColors(tools)
+    self.bulletToolbarButton=skin:Button(tools,nil,L["Bullet list"],function() self:ToggleBullet() end,18,true)
+    self.bulletToolbarButton:SetHeight(18); self.bulletToolbarButton:SetPoint("LEFT",230,0)
+    self.bulletToolbarButton.fill:Hide()
+    self.bulletGlyph={}; self.bulletToolbarButton.iconParts=self.bulletGlyph
+    -- Draw a compact list glyph using native UI textures.
+    for row=0,2 do
+        for column=0,1 do
+            local mark=self.bulletToolbarButton:CreateTexture(nil,"ARTWORK")
+            mark:SetSize(column==0 and 2 or 9,2)
+            mark:SetPoint("TOPLEFT",column==0 and 1 or 6,-3-row*5)
+            app.platform:Color(mark,skin.colors.text)
+            self.bulletGlyph[#self.bulletGlyph+1]=mark
+        end
+    end
+    self.toolbarSeparators={}
+    for _,offset in ipairs({78,138}) do
+        local line=tools:CreateTexture(nil,"ARTWORK")
+        line:SetSize(1,12); line:SetPoint("LEFT",offset,0); line:SetAlpha(0.15)
+        app.platform:Color(line,skin.colors.text)
+        self.toolbarSeparators[#self.toolbarSeparators+1]=line
     end
     local function right(icon,tip,offset,callback)
         local button = skin:Button(header,icon,tip,callback); button:SetPoint("RIGHT",offset,0); return button
     end
     right("close",L["Close"],-6,function() self:Animate(false,false) end)
-    right("minimize",L["Minimize"],-32,function() self:Animate(false,true) end)
-    right("settings",L["Settings"],-58,function() self:Settings() end)
-    self.autoButton = right("autoHide",L["Auto-hide toolbar"],-84,function()
+    right("minimize",L["Minimize"],-30,function() self:Animate(false,true) end)
+    right("settings",L["Settings"],-54,function() self:Settings() end)
+    self.autoButton = right("autoHide",L["Auto-hide toolbar"],-78,function()
         self.options.autoHide = not self.options.autoHide
         self.autoButton.active = self.options.autoHide; self.idle = 0; self:Layout()
     end)
@@ -624,15 +798,27 @@ function view:BuildEditor()
     editor:SetScript("OnTextChanged",function(frame,userInput)
         if userInput~=false then app:CommitNoteInput(frame) end
     end)
-    editor:SetScript("OnMouseDown",function() self:CloseSearch(); self.picker:Hide(); self:CommitRename() end)
-    editor:SetScript("OnEscapePressed",function(frame) frame:ClearFocus() end)
+    editor:SetScript("OnMouseDown",function()
+        self.textPalette:Hide(); self.colorSelection=nil
+        self:CloseSearch(); self.picker:Hide(); self:CommitRename()
+    end)
+    editor:SetScript("OnEscapePressed",function(frame)
+        if self.textPalette:IsShown() then self.textPalette:Hide() else frame:ClearFocus() end
+    end)
     editor:SetScript("OnTabPressed",function(frame) frame:Insert("    "); app:CommitNoteInput(frame) end)
-    editor:SetScript("OnKeyDown",function(_,key)
+    editor:SetScript("OnKeyDown",function(frame,key)
+        self.bulletEnter=(key=="ENTER" or key=="NUMPADENTER") and not IsControlKeyDown() and (frame:GetCursorPosition()+1) or nil
         if not IsControlKeyDown() then return end
-        if key=="Z" then book:Restore(-1); self:Refresh()
+        if key=="R" then
+            self.colorSelection=self:CaptureColorSelection()
+            self.textPalette:Hide(); self:ApplyTextColor()
+        elseif key=="Z" then book:Restore(-1); self:Refresh()
         elseif key=="Y" then book:Restore(1); self:Refresh()
         elseif key=="F" then self:Search()
         elseif key=="N" then self:NewPage() end
+    end)
+    editor:SetScript("OnKeyUp",function(_,key)
+        if key=="ENTER" or key=="NUMPADENTER" then self.bulletEnter=nil end
     end)
     editor:SetScript("OnCursorChanged",function(_,_,y,_,height)
         local top,position=-y,self.editorScroll:GetVerticalScroll()
@@ -697,7 +883,7 @@ function view:BuildSettings()
     local settingsScroll=skin:ScrollFrame(self.preferences)
     self.settingsScroll=settingsScroll
     settingsScroll:SetPoint("TOPLEFT",24,-16); settingsScroll:SetPoint("BOTTOMRIGHT",-30,16)
-    local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,430)
+    local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,505)
     self.settingsCard=card
     card.settingsCard=true
     settingsScroll:SetScrollChild(card)
@@ -761,8 +947,23 @@ function view:BuildSettings()
         self:ApplyStyle()
     end,260)
     reset:SetPoint("TOPLEFT",0,-355); skin:Label(reset,L["Reset appearance"]):SetPoint("CENTER")
+    self.bulletButton=skin:Button(card,nil,nil,function(button)
+        self.options.automaticBullets=not self.options.automaticBullets
+        button.label:SetText(self.options.automaticBullets and L["Automatic bullet lists: on"] or L["Automatic bullet lists: off"])
+    end,260)
+    self.bulletButton:SetPoint("TOPLEFT",0,-395)
+    self.bulletButton.label=skin:Label(self.bulletButton,self.options.automaticBullets and L["Automatic bullet lists: on"] or L["Automatic bullet lists: off"])
+    self.bulletButton.label:SetPoint("CENTER")
+    self.navigationButton=skin:Button(card,nil,nil,function(button)
+        self.options.showNoteNavigation=not self.options.showNoteNavigation
+        button.label:SetText(self.options.showNoteNavigation and L["Previous/next buttons: on"] or L["Previous/next buttons: off"])
+        self:Layout()
+    end,260)
+    self.navigationButton:SetPoint("TOPLEFT",0,-435)
+    self.navigationButton.label=skin:Label(self.navigationButton,self.options.showNoteNavigation and L["Previous/next buttons: on"] or L["Previous/next buttons: off"])
+    self.navigationButton.label:SetPoint("CENTER")
     local about=skin:Label(card,"SimpleNotepad "..app.version.." "..string.format(L["by %s"],"sAks"),true)
-    about:SetPoint("TOPLEFT",0,-400); about:SetSize(260,16); about:SetJustifyH("CENTER")
+    about:SetPoint("TOPLEFT",0,-480); about:SetSize(260,16); about:SetJustifyH("CENTER")
     self.preferences:Hide()
 end
 
@@ -779,6 +980,9 @@ end
 
 function view:ApplyStyle()
     skin:Configure(self.options)
+    if self.textColorStripe then self:UpdateTextColor() end
+    for _,mark in ipairs(self.bulletGlyph or {}) do app.platform:Color(mark,skin.colors.text) end
+    for _,line in ipairs(self.toolbarSeparators or {}) do app.platform:Color(line,skin.colors.text) end
     if self.shareCount then self.shareCount:SetTextColor(unpack(skin.colors.blue)) end
     if self.styleButton then self.styleButton.label:SetText(self.options.style == "wow" and L["Style: WoW"] or L["Style: modern"]) end
     if self.editor then self.editor:SetTextColor(unpack(skin.colors.text)) end
@@ -819,13 +1023,13 @@ function app:BuildWindow()
     view.root=CreateFrame("Frame",nil,UIParent)
     -- A failed build must never leave a visible frame intercepting mouse input.
     view.root:Hide()
-    view.root:SetSize(math.max(360,view.options.width or 560),math.max(MIN_HEIGHT,view.options.height or 360))
+    view.root:SetSize(math.max(MIN_WIDTH,view.options.width or 560),math.max(MIN_HEIGHT,view.options.height or 360))
     view.root:SetScale(view.options.scale)
     view.root:SetPoint("CENTER",UIParent,"CENTER",(view.options.x or 0)/view.options.scale,(view.options.y or 0)/view.options.scale)
     view.root:SetFrameStrata("DIALOG"); view.root:SetClampedToScreen(true)
     view.root:SetMovable(true); view.root:SetResizable(true); view.root:EnableMouse(true)
     app.platform:Clip(view.root)
-    app.platform:ResizeBounds(view.root,360,MIN_HEIGHT)
+    app.platform:ResizeBounds(view.root,MIN_WIDTH,MIN_HEIGHT)
     view.content=CreateFrame("Frame",nil,view.root)
     app.platform:Clip(view.content)
     view.backgroundFill=skin:Fill(view.content,skin.colors.editor)
@@ -857,7 +1061,7 @@ function app:BuildWindow()
     grip:SetHeight(14); grip.icon:SetSize(12,12); grip:SetPoint("BOTTOMRIGHT",-4,4)
     grip:SetScript("OnMouseDown",function()
         if not view.animation and not view.options.locked then
-            view.noteHeight=nil; view.noteWidth=nil; view.root:StartSizing("BOTTOMRIGHT")
+            view.root:StartSizing("BOTTOMRIGHT")
         end
     end)
     grip:SetScript("OnMouseUp",function() view:SaveBounds() end)
@@ -869,7 +1073,7 @@ function app:BuildWindow()
     view.root:SetScript("OnUpdate",function(_,elapsed) view:Tick(elapsed) end)
     view.root:SetScript("OnHide",function() view:EndTabDrag() end)
     StaticPopupDialogs.SIMPLENOTEPAD_DELETE={
-        text=L["Permanently delete this note?"],button1=YES,button2=NO,
+        text=L["Permanently delete this note?"],button1=app.forceEnglish and "Yes" or YES,button2=app.forceEnglish and "No" or NO,
         OnAccept=function(_,page)
             view:CommitRename()
             for index,candidate in ipairs(book.data.pages) do if candidate==page then book:Remove(index); break end end

@@ -82,7 +82,7 @@ local translations = {
     },
 }
 translations.esMX = translations.esES
-local language = GetLocale and GetLocale() or "enUS"
+local language = app.forceEnglish and "enUS" or (GetLocale and GetLocale() or "enUS")
 local selected = translations[language]
 local strings = setmetatable({}, {__index = function(_,key) return key end})
 for index,key in ipairs(keys) do strings[key] = selected and selected[index] or key end
@@ -723,7 +723,49 @@ networkTranslations.esMX = networkTranslations.esES
 local network = networkTranslations[language]
 -- Unknown locales retain English; supported locales supply every sharing string.
 for key in pairs(networkStrings) do strings[key] = network and network[key] or key end
+local formattingKeys={"Text color", "Text color: left-click to apply, right-click for palette.", "Select text to apply a color.", "Automatic bullet lists: on", "Automatic bullet lists: off"}
+local formattingTranslations={
+    deDE={"Textfarbe", "Linksklick zum Anwenden, Rechtsklick für die Palette.", "Markiere Text, um ihn einzufärben.", "Automatische Listen: an", "Automatische Listen: aus"},
+    frFR={"Couleur du texte", "Clic gauche pour appliquer, clic droit pour la palette.", "Sélectionnez le texte à colorer.", "Listes automatiques : oui", "Listes automatiques : non"},
+    esES={"Color del texto", "Clic izquierdo para aplicar, clic derecho para la paleta.", "Selecciona el texto que quieras colorear.", "Listas automáticas: sí", "Listas automáticas: no"},
+    ptBR={"Cor do texto", "Clique esquerdo para aplicar, clique direito para a paleta.", "Selecione o texto para aplicar uma cor.", "Listas automáticas: sim", "Listas automáticas: não"},
+    itIT={"Colore del testo", "Clic sinistro per applicare, clic destro per la tavolozza.", "Seleziona il testo da colorare.", "Elenchi automatici: sì", "Elenchi automatici: no"},
+    ruRU={"Цвет текста", "Левая кнопка — применить, правая — открыть палитру.", "Выделите текст для окрашивания.", "Автосписки: вкл.", "Автосписки: выкл."},
+    koKR={"글자색", "왼쪽 클릭으로 적용, 오른쪽 클릭으로 팔레트 열기.", "색을 적용할 글자를 선택하세요.", "자동 목록: 켜짐", "자동 목록: 꺼짐"},
+    zhCN={"文字颜色", "左键应用，右键打开调色板。", "请选择要着色的文字。", "自动列表：开启", "自动列表：关闭"},
+    zhTW={"文字顏色", "左鍵套用，右鍵開啟調色盤。", "請選取要著色的文字。", "自動清單：開啟", "自動清單：關閉"},
+}
+formattingTranslations.esMX=formattingTranslations.esES
+local formattingLocale=formattingTranslations[language]
+for index,key in ipairs(formattingKeys) do strings[key]=formattingLocale and formattingLocale[index] or key end
+local navigationKeys={"Previous/next buttons: on", "Previous/next buttons: off"}
+local navigationTranslations={
+    deDE={"Vor-/Zurück-Buttons: an","Vor-/Zurück-Buttons: aus"},
+    frFR={"Boutons précédent/suivant : activés","Boutons précédent/suivant : désactivés"},
+    esES={"Botones anterior/siguiente: sí","Botones anterior/siguiente: no"},
+    ptBR={"Botões anterior/próxima: ativados","Botões anterior/próxima: desativados"},
+    itIT={"Pulsanti precedente/successiva: sì","Pulsanti precedente/successiva: no"},
+    ruRU={"Кнопки назад/вперёд: вкл.","Кнопки назад/вперёд: выкл."},
+    koKR={"이전/다음 버튼: 켜짐","이전/다음 버튼: 꺼짐"},
+    zhCN={"上一条/下一条按钮：开启","上一条/下一条按钮：关闭"},
+    zhTW={"上一則/下一則按鈕：開啟","上一則/下一則按鈕：關閉"},
+}
+navigationTranslations.esMX=navigationTranslations.esES
+local navigationLocale=navigationTranslations[language]
+for index,key in ipairs(navigationKeys) do strings[key]=navigationLocale and navigationLocale[index] or key end
 app.L = strings
+local bulletTranslations={deDE="Aufzählung",frFR="Liste à puces",esES="Lista con viñetas",esMX="Lista con viñetas",ptBR="Lista com marcadores",itIT="Elenco puntato",ruRU="Маркированный список",koKR="글머리 기호 목록",zhCN="项目符号列表",zhTW="項目符號清單"}
+strings["Bullet list"]=bulletTranslations[language] or "Bullet list"
+
+strings["Search notes"]=strings["Search notes"].." (CTRL + F)"
+strings["New note"]=strings["New note"].." (CTRL + N)"
+for key,letter in pairs({["Undo (Ctrl+Z)"]="Z",["Redo (Ctrl+Y)"]="Y"}) do
+    local label=strings[key]:gsub("%s*%b()$",""):gsub("（.-）$","")
+    strings[key]=label.." (CTRL + "..letter..")"
+end
+local colorTip="Text color: left-click to apply, right-click for palette."
+local colorInstructions=formattingLocale and formattingLocale[2] or "Left-click to apply, right-click for palette."
+strings[colorTip]=strings["Text color"].." (CTRL + R)\n"..colorInstructions
 
 local folded = {}
 local upper = {"À","Á","Â","Ã","Ä","Å","Æ","Ç","È","É","Ê","Ë","Ì","Í","Î","Ï","Ñ","Ò","Ó","Ô","Õ","Ö","Ø","Ù","Ú","Û","Ü","Ý","Œ","Ÿ","ẞ","А","Б","В","Г","Д","Е","Ё","Ж","З","И","Й","К","Л","М","Н","О","П","Р","С","Т","У","Ф","Х","Ц","Ч","Ш","Щ","Ъ","Ы","Ь","Э","Ю","Я"}

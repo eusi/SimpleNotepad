@@ -107,12 +107,12 @@ function skin:Icon(parent, name)
     return texture
 end
 
-function skin:Button(parent, icon, tooltip, callback, width)
+function skin:Button(parent, icon, tooltip, callback, width, plain)
     local button = CreateFrame("Button", nil, parent)
-    button.plain=icon ~= nil
+    button.plain=icon ~= nil or plain == true
     button.settings=parent.settingsCard
     button:SetSize(width or (icon and 18 or 28),icon and 18 or 28)
-    button.fill = self:Fill(button, self.colors.button)
+    button.fill = button.plain and button:CreateTexture(nil,"BACKGROUND") or self:Fill(button, self.colors.button)
     if button.plain then button.fill:Hide() end
     -- Light upper edges and dark lower edges give the native stone material
     -- the shallow inset/button treatment used by WoW panels.
@@ -150,7 +150,10 @@ end
 function skin:ButtonState(button)
     if button.plain then
         button.fill:Hide()
-        button.icon:SetVertexColor(unpack(button.iconColor or ((button.active or button.hovered) and self.colors.blue or self.colors.text)))
+        local color=button.iconColor or ((button.active or button.hovered) and self.colors.blue or self.colors.text)
+        if button.icon then button.icon:SetVertexColor(unpack(color)) end
+        if button.glyph then button.glyph:SetTextColor(unpack(color)) end
+        for _,part in ipairs(button.iconParts or {}) do part:SetVertexColor(unpack(color)) end
     elseif button.settings then
         local color=button.hovered and self.colors.hover or button.active and self.colors.active or self.colors.button
         if not self.wow then
@@ -204,11 +207,19 @@ function skin:ScrollFrame(parent)
     self:Fill(bar,self.colors.rail)
     bar:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
     bar:SetValueStep(1); app.platform:Slider(bar)
+    function scroll:VerticalRange()
+        if self.contentHeight then
+            -- Explicit frame layouts need no cached native scroll-range query.
+            local range=math.max(0,self.contentHeight()-self:GetHeight())
+            return range>1 and range or 0
+        end
+        return math.max(0,self:GetVerticalScrollRange())
+    end
     function scroll:UpdateScrollBar()
         -- Slider and ScrollFrame callbacks can trigger each other.
         if self.syncing then return end
         self.syncing=true
-        local range=math.max(0,self:GetVerticalScrollRange())
+        local range=self:VerticalRange()
         bar:SetMinMaxValues(0,range)
         local value=math.max(0,math.min(range,self:GetVerticalScroll()))
         bar:SetValue(value)
@@ -227,7 +238,7 @@ function skin:ScrollFrame(parent)
     scroll:SetScript("OnSizeChanged",function(frame) frame:UpdateScrollBar() end)
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel",function(frame,delta)
-        frame:SetVerticalScroll(math.max(0,math.min(frame:GetVerticalScrollRange(),frame:GetVerticalScroll()-delta*40)))
+        frame:SetVerticalScroll(math.max(0,math.min(frame:VerticalRange(),frame:GetVerticalScroll()-delta*40)))
     end)
     scrolls[#scrolls+1]=scroll
     self:StyleScroll(scroll)

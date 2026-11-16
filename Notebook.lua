@@ -130,11 +130,14 @@ function journal:Load(database, account, character, references)
     database.pages = database.pages or {{name = L["Notes"], body = ""}}
     if #database.pages == 0 then database.pages[1] = {name = L["Notes"], body = ""} end
     database.options = database.options or {}
-    local defaults = {opacity = 0.9, scale = 1, minimap = true, autoHide = false, style = "flat", locked = false, minimizedIcon = true}
+    local defaults = {opacity = 0.9, scale = 1, minimap = true, autoHide = false, style = "flat", locked = false, minimizedIcon = true, automaticBullets = false, showNoteNavigation = false, textColor = "ffcc66"}
     for key, value in pairs(defaults) do
         if database.options[key] == nil then database.options[key] = value end
     end
     local options=database.options
+    options.automaticBullets=options.automaticBullets==true
+    options.showNoteNavigation=options.showNoteNavigation==true
+    if type(options.textColor)~="string" or not options.textColor:match("^%x%x%x%x%x%x$") then options.textColor="ffcc66" end
     if options.style~="wow" then options.style="flat" end
     if type(options.styleColors)~="table" then options.styleColors={} end
     for _,style in ipairs({"flat","wow"}) do
@@ -286,4 +289,82 @@ function journal:Search(query)
         end
     end
     return results
+end
+
+-- Byte offsets match EditBox cursor/highlight positions, including WoW markup.
+local formatting={}
+app.formatting=formatting
+formatting.palette={"ffffff","b8b8b8","666666","333333","000000",
+    "ff3333","754a2a","ff8800","ffff00","33cc33",
+    "176b35","008080","00dddd","a1d2f4","0088ff",
+    "173b80","4b0082","9933ff","ff00cc","ff99bb"}
+local function tokens(text)
+    local result,index={},1
+    while index<=#text do
+        local head=text:sub(index,index+9)
+        local value=head:match("^|c%x%x%x%x%x%x%x%x") or head:match("^|r") or head:match("^||")
+        local marker=head:sub(1,2)
+        if not value and (marker=="|H" or marker=="|T" or marker=="|A") then
+            local ending=marker=="|H" and "|h" or marker=="|T" and "|t" or "|a"
+            local last=text:find(ending,index+2,true)
+            if last and marker=="|H" then last=text:find(ending,last+2,true) end
+            if last then value=text:sub(index,last+1) end
+        end
+        if not value then value=head:match("^[%z\1-\127\194-\244][\128-\191]*") or head:sub(1,1) end
+        result[#result+1]={text=value,first=index-1,last=index-1+#value}
+        index=index+#value
+    end
+    return result
+end
+function formatting:Color(text,first,last,color)
+    if type(color)~="string" or not color:match("^%x%x%x%x%x%x$") or first>=last then return text end
+    local parts=tokens(text)
+    -- Never split UTF-8, escape sequences, hyperlinks or embedded images.
+    for _,part in ipairs(parts) do
+        if first>part.first and first<part.last then first=part.first end
+        if last>part.first and last<part.last then last=part.last end
+    end
+    first=math.max(0,first); last=math.min(#text,last)
+    local active,selected={},{ }
+    for _,part in ipairs(parts) do
+        if part.first>=last then break end
+        local isColor=part.text:match("^|c%x%x%x%x%x%x%x%x$")
+        local reset=part.text=="|r"
+        if isColor then active={part.text} elseif reset then active={} end
+        if part.first>=first and not isColor and not reset then
+            selected[#selected+1]=part.text
+            -- A link may reset its own color; resume the chosen text color.
+            if part.text:find("|r",1,true) then selected[#selected+1]="|cff"..color end
+        end
+    end
+    if #selected==0 then return text end
+    local prefix=text:sub(1,first).."|cff"..color
+    local result=prefix..table.concat(selected).."|r"..table.concat(active)..text:sub(last+1)
+    return result,#prefix,#prefix+#table.concat(selected)
+end
+function formatting:ContinueBullet(before,after,cursor)
+    -- Only a single typed newline continues a list; paste/replacements stay intact.
+    if #after~=#before+1 then return end
+    local position=cursor or 1
+    if not cursor then
+        while position<=#before and before:sub(position,position)==after:sub(position,position) do position=position+1 end
+    end
+    if after:sub(position,position)~="\n" or after:sub(position+1)~=before:sub(position) then return end
+    local preceding=before:sub(1,position-1)
+    local line=preceding:match("([^\n]*)$")
+    local plain=line:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+    local indent,content=plain:match("^([ \t]*)%-[ \t]+(.*)$")
+    if not indent then return end
+    if content:match("^%s*$") then
+        -- A second Enter finishes the list. Keep any color escapes balanced.
+        local retained={}
+        for _,part in ipairs(tokens(line)) do
+            if part.text=="|r" or part.text:match("^|c%x%x%x%x%x%x%x%x$") then retained[#retained+1]=part.text end
+        end
+        local escapes=table.concat(retained)
+        local prefix=preceding:sub(1,#preceding-#line)..escapes
+        return prefix..before:sub(position),#prefix
+    end
+    local prefix=after:sub(1,position)..indent.."- "
+    return prefix..after:sub(position+1),#prefix
 end

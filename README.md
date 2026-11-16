@@ -17,17 +17,16 @@ An in-game notepad for notes, reminders, and useful links.
 
 ## Features
 
-- Named notes with tabs and previous/next navigation.
-- Character-only notes by default, global notes via globe toggle.
-- Share notes with party and raid members, with a preview and accept/reject controls.
+- **Named notes** with tab navigation.
+- Character-only notes by default, **global notes** via globe toggle.
+- **Share notes** with party and raid members, with a preview and accept/reject controls.
+- **Undo/redo, copy/paste**, and clickable **WoW links**.
+- **Text coloring** and optional automatic **bullet lists**.
 - Reopen, rename, or delete notes through the all-notes list.
-- Close tabs without deleting notes; new and reopened tabs appear last.
 - Long-press and drag tabs to sort them.
-- Search titles and text; press Enter to cycle through matches.
-- Undo/redo, copy/paste, and clickable WoW links.
-- Shift-click inventory or chat item links into the focused note.
-- Movable, resizable window down to one text line, with saved layout.
-- Minimize to a draggable icon button.
+- **Search notes** and text.
+- **Movable**, resizable window down to one text line, with saved layout.
+- **Minimize** to a draggable icon button.
 - Optional draggable minimap icon and configurable key bindings.
 - Languages: English, German, French, Spanish, Portuguese, Italian, Russian, Korean, and Chinese.
 
@@ -39,6 +38,7 @@ An in-game notepad for notes, reminders, and useful links.
 - **Scale:** 65-150%; default **100%**.
 - **Window lock:** Lock window position, size, and minimized button.
 - **Auto-hide:** Hide toolbar and tabs; hover at the top to reveal them.
+- **Previous/next buttons:** Show note navigation in the toolbar; off by default.
 - **Minimap icon:** Show/hide.
 - **Minimized button:** Addon icon or SNP text.
 
@@ -48,6 +48,7 @@ An in-game notepad for notes, reminders, and useful links.
 - `/snp search`: Toggle search.
 - **Ctrl+F / Ctrl+N:** Search / new note.
 - **Ctrl+Z / Ctrl+Y:** Undo / redo.
+- **Ctrl+R:** Apply the currently selected text color to selected text.
 - **Tab:** Insert four spaces.
 - **Enter:** Next search match / save note name.
 - **Escape:** Close search / cancel dialog / release text focus.

@@ -95,17 +95,13 @@ end
 function view:SetSharingSection(section)
     if self.durationMenu then self.durationMenu:Hide() end
     self.sharingSection=section
+    self.sharingViewport:SetHorizontalScroll(0); self.sharingViewport:SetVerticalScroll(0)
     if section~="receive" and self.previewNote then self:PreviewIncoming(nil) end
     app:SharingChanged()
 end
 
-function view:SharingMinimumHeight()
-    if self.previewNote and self.sharingSection=="receive" then
-        -- Keep all pending rows above the preview and the explanatory footer.
-        local rows=math.max(2,math.min(5,#share.inbox))
-        return 537+rows*39+(self.options.style=="wow" and 20 or 0)
-    end
-    return 460
+function view:SharingContentHeight()
+    return self.sharingMinimumContentHeight or 180
 end
 
 function view:ConfirmIncoming(note,block)
@@ -190,6 +186,9 @@ function view:SharingLists()
             end)
             row.label:ClearAllPoints(); row.label:SetPoint("LEFT",8,0)
             row.label:SetPoint("RIGHT",-28,0); row.label:SetJustifyH("LEFT")
+            row:HookScript("OnEnter",function(control)
+                GameTooltip:SetOwner(control,"ANCHOR_RIGHT"); GameTooltip:SetText(control.page.name); GameTooltip:Show()
+            end)
             row.selectionMark=row:CreateTexture(nil,"OVERLAY")
             row.selectionMark:SetPoint("TOPLEFT"); row.selectionMark:SetPoint("BOTTOMLEFT"); row.selectionMark:SetWidth(3)
             row.selectionCheck=skin:Icon(row,"accept"); row.selectionCheck:SetSize(12,12)
@@ -241,44 +240,88 @@ function view:SharingLists()
 end
 
 function view:LayoutSharing()
-    if not self.sharingPanel or self.sharingLayout then return end
+    if not self.sharingReady or self.sharingLayout then return end
     self.sharingLayout=true
     local preview=self.mode=="sharing" and self.previewNote~=nil and self.sharingSection=="receive"
-    if preview then
-        self.previewBaseHeight=self.previewBaseHeight or self.root:GetHeight()
-        local minimum=self:SharingMinimumHeight()
-        if self.root:GetHeight()<minimum then
-            self.previewExpandedHeight=minimum; self.root:SetHeight(minimum)
-        end
-    elseif self.previewBaseHeight then
-        local height=self.previewBaseHeight
-        local restore=self.mode=="sharing" and self.root:GetHeight()==self.previewExpandedHeight
-        self.previewBaseHeight=nil; self.previewExpandedHeight=nil
-        if restore then self.root:SetHeight(math.max(400,height)) end
-    end
     self.receiveState:SetWidth(0)
     self.receiveState:SetWidth(math.ceil(self.receiveState:GetStringWidth())+2)
     self.receiveTimer:SetWidth(0)
     self.receiveTimer:SetWidth(math.max(1,math.ceil(self.receiveTimer:GetStringWidth())))
     self.durationButton:SetWidth(math.max(86,math.ceil(self.durationLabel:GetStringWidth())+24))
     self.receiveButton:SetWidth(math.max(112,math.ceil(self.receiveLabel:GetStringWidth())+24))
-    -- Translated receiving controls must fit even with an unlimited timer.
+    -- Size the scroll child from text metrics, never from hidden frame widths.
+    -- Sending does not inherit the wider receiving controls.
     local rowWidth=self.receiveState:GetWidth()+self.receiveTimer:GetWidth()+self.durationButton:GetWidth()+self.receiveButton:GetWidth()+42
-    self.sharingMinimumWidth=math.max(560,math.ceil(rowWidth+self.root:GetWidth()-self.receivingPanel:GetWidth()))
-    if self.mode=="sharing" and self.root:GetWidth()<self.sharingMinimumWidth then
-        self.noteWidth=self.noteWidth or self.root:GetWidth()
-        self.root:SetWidth(self.sharingMinimumWidth)
+    local viewport=self.sharingViewport
+    local compact=self.content:GetHeight()<96
+    local subHeight=compact and 16 or 30
+    self.sharingSubBar:SetHeight(subHeight)
+    local tabWidth=math.min(110,self.content:GetWidth()*0.44)
+    self.sendSub:SetWidth(tabWidth); self.sendSub:SetHeight(subHeight-2)
+    self.receiveSub:ClearAllPoints(); self.receiveSub:SetPoint("TOPLEFT",tabWidth,-1)
+    self.receiveSub:SetWidth(math.min(140,self.content:GetWidth()-tabWidth)); self.receiveSub:SetHeight(subHeight-2)
+    for _,control in ipairs({self.sendSub,self.receiveSub}) do
+        control.label:SetWidth(self.content:GetWidth()<250 and math.max(1,control:GetWidth()-16) or 0)
+        control.label:SetWordWrap(false)
+        shown(control.count,self.content:GetWidth()>=250)
     end
-    local actionWidth=math.max(160,math.min(210,math.floor(self.sharingPanel:GetWidth()*0.34)))
+    local receive=self.sharingSection=="receive"
+    local actionMinimum=math.max(112,math.ceil(self.sendNoteButton.label:GetStringWidth())+24,math.ceil(self.sendNotesCaption:GetStringWidth())+8)
+    local noteMinimum=math.max(120,math.ceil(self.chooseNotesLabel:GetStringWidth())+8)
+    local columns=118+math.max(self.inboxNameHeader:GetStringWidth()/0.30,self.inboxPreviewHeader:GetStringWidth()/0.40,self.inboxSenderHeader:GetStringWidth()/0.30)
+    local minimumWidth=receive and math.max(280,math.ceil(columns),self.durationButton:GetWidth()+self.receiveButton:GetWidth()+10,
+        self.receiveState:GetWidth()+self.receiveTimer:GetWidth()+10) or noteMinimum+actionMinimum+24
+    local vertical=false
+    for pass=1,3 do
+        local available=math.max(1,self.content:GetWidth()-(vertical and 28 or 12))
+        local contentWidth=math.max(minimumWidth,available)
+        local horizontal=contentWidth>available+1
+        viewport:ClearAllPoints()
+        viewport:SetPoint("TOPLEFT",self.rail,"BOTTOMLEFT",6,-subHeight)
+        viewport:SetPoint("BOTTOMRIGHT",self.content,"BOTTOMRIGHT",vertical and -22 or -6,horizontal and 12 or 4)
+        self.sharingPanel:SetWidth(contentWidth)
+        local stacked=contentWidth<rowWidth
+        local extra=stacked and 36 or 0
+        self.receiveButton:ClearAllPoints();self.durationButton:ClearAllPoints()
+        if stacked then
+            self.durationButton:SetPoint("TOPLEFT",0,-36)
+            self.receiveButton:SetPoint("TOPLEFT",self.durationButton,"TOPRIGHT",10,0)
+        else
+            self.receiveButton:SetPoint("TOPRIGHT")
+            self.durationButton:SetPoint("RIGHT",self.receiveButton,"LEFT",-10,0)
+        end
+        self.receiveDivider:ClearAllPoints();self.receiveDivider:SetPoint("TOPLEFT",0,-36-extra);self.receiveDivider:SetPoint("TOPRIGHT",0,-36-extra)
+        self.incomingHeading:ClearAllPoints();self.incomingHeading:SetPoint("TOPLEFT",0,-54-extra)
+        self.inboxHeaders:ClearAllPoints();self.inboxHeaders:SetPoint("TOPLEFT",0,-88-extra);self.inboxHeaders:SetPoint("TOPRIGHT",-22,-88-extra)
+        self.inboxEmpty:ClearAllPoints();self.inboxEmpty:SetPoint("TOPLEFT",0,-120-extra)
+        local hint=receive and self.receiveHint or self.sendHint
+        hint:SetHeight(0)
+        local hintHeight=math.max(28,math.ceil(hint:GetStringHeight())+6)
+        hint:SetHeight(hintHeight)
+        self.sharingFooterLine:ClearAllPoints()
+        self.sharingFooterLine:SetPoint("BOTTOMLEFT",0,hintHeight+10);self.sharingFooterLine:SetPoint("BOTTOMRIGHT",0,hintHeight+10)
+        local statusHeight=0
+        if self.sharingStatus:GetText()~="" then
+            self.sharingStatus:SetHeight(0);statusHeight=math.max(20,math.ceil(self.sharingStatus:GetStringHeight())+6)
+        end
+        self.sharingStatus:ClearAllPoints()
+        self.sharingStatus:SetPoint("BOTTOMLEFT",0,hintHeight+16);self.sharingStatus:SetPoint("BOTTOMRIGHT",0,hintHeight+16)
+        self.sharingStatus:SetHeight(statusHeight);shown(self.sharingStatus,statusHeight>0)
+        local footerHeight=hintHeight+26+statusHeight
+        self.sendingPanel:ClearAllPoints();self.sendingPanel:SetPoint("TOPLEFT");self.sendingPanel:SetPoint("BOTTOMRIGHT",0,footerHeight)
+        self.receivingPanel:ClearAllPoints();self.receivingPanel:SetPoint("TOPLEFT");self.receivingPanel:SetPoint("BOTTOMRIGHT",0,footerHeight)
+        local rows=preview and math.max(1,math.min(5,#share.inbox)) or 1
+        self.sharingMinimumContentHeight=receive and 88+extra+18+3+rows*39+footerHeight+(preview and 212 or 0) or 78+32+footerHeight
+        self.sharingPanel:SetHeight(math.max(self:SharingContentHeight(),viewport:GetHeight()))
+        local needed=self:SharingContentHeight()>viewport:GetHeight()+1
+        if needed==vertical then break end
+        vertical=needed
+    end
+    local actionWidth=math.max(actionMinimum,math.min(210,math.floor(self.sharingPanel:GetWidth()*0.34)))
     local sourceWidth=math.max(100,self.sharingPanel:GetWidth()-actionWidth-24)
     self.sourceScroll:SetWidth(sourceWidth)
     self.sourceCanvas:SetWidth(math.max(1,sourceWidth-22))
     self.sendActionPanel:SetWidth(actionWidth); self.sendNoteButton:SetWidth(actionWidth)
-    self.sharingStatus:ClearAllPoints()
-    local receive=self.sharingSection=="receive"
-    self.sharingStatus:SetPoint("BOTTOMLEFT",0,54)
-    self.sharingStatus:SetPoint("BOTTOMRIGHT",0,54)
-    self.sharingStatus:SetHeight(32)
     shown(self.sendHint,not receive); shown(self.receiveHint,receive)
     local width=math.max(1,self.inboxScroll:GetWidth())
     self.inboxCanvas:SetWidth(width)
@@ -305,8 +348,26 @@ function view:LayoutSharing()
     self.inboxScroll:SetPoint("TOPLEFT",self.inboxHeaders,"BOTTOMLEFT",0,-3)
     self.inboxScroll:SetPoint("BOTTOMRIGHT",-22,preview and 212 or 0)
     if self.preview then self.preview:SetWidth(math.max(1,self.previewScroll:GetWidth())) end
+    viewport:UpdateScrollBar()
+    self:UpdateSharingHorizontalScroll()
     skin:ResizeTextures()
     self.sharingLayout=nil
+end
+
+function view:UpdateSharingHorizontalScroll()
+    if self.sharingHorizontalSync then return end
+    self.sharingHorizontalSync=true
+    local viewport,bar=self.sharingViewport,self.sharingHorizontalBar
+    local range=math.max(0,self.sharingPanel:GetWidth()-viewport:GetWidth())
+    if range<=1 then range=0 end
+    local value=math.max(0,math.min(range,viewport:GetHorizontalScroll()))
+    bar:SetMinMaxValues(0,range); bar:SetValue(value)
+    if value~=viewport:GetHorizontalScroll() then viewport:SetHorizontalScroll(value) end
+    local width=math.max(1,viewport:GetWidth())
+    bar:GetThumbTexture():SetSize(math.min(width,math.max(18,width*width/(width+range))),6)
+    app.platform:Color(bar:GetThumbTexture(),skin.colors.muted)
+    shown(bar,range>0)
+    self.sharingHorizontalSync=nil
 end
 
 function app:BuildSharingWindow()
@@ -323,9 +384,30 @@ function app:BuildSharingWindow()
     close:SetPoint("RIGHT",-6,0); close:SetHeight(12); close.icon:SetSize(10,10)
     tab.close=close; tab:Hide()
 
-    local panel=CreateFrame("Frame",nil,view.content); view.sharingPanel=panel
-    panel:SetPoint("TOPLEFT",view.rail,"BOTTOMLEFT",10,-8); panel:SetPoint("BOTTOMRIGHT",-10,20)
-    local subBar=CreateFrame("Frame",nil,panel); view.sharingSubBar=subBar
+    local viewport=skin:ScrollFrame(view.content); view.sharingViewport=viewport
+    viewport:SetPoint("TOPLEFT",view.rail,"BOTTOMLEFT",6,-30)
+    viewport:SetPoint("BOTTOMRIGHT",-22,12)
+    local panel=CreateFrame("Frame",nil,viewport); view.sharingPanel=panel
+    panel:SetSize(460,280); viewport:SetScrollChild(panel)
+    viewport.contentHeight=function() return panel:GetHeight() end
+    local horizontal=CreateFrame("Slider",nil,viewport); view.sharingHorizontalBar=horizontal
+    horizontal:SetOrientation("HORIZONTAL"); horizontal:SetHeight(6); horizontal:EnableMouse(true)
+    horizontal:SetPoint("TOPLEFT",viewport,"BOTTOMLEFT",0,-2)
+    horizontal:SetPoint("TOPRIGHT",viewport,"BOTTOMRIGHT",0,-2)
+    skin:Fill(horizontal,skin.colors.rail); horizontal:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
+    horizontal:SetValueStep(1); app.platform:Slider(horizontal)
+    horizontal:SetScript("OnValueChanged",function(_,value)
+        if not view.sharingHorizontalSync then viewport:SetHorizontalScroll(value) end
+    end)
+    viewport:SetScript("OnHorizontalScroll",function() view:UpdateSharingHorizontalScroll() end)
+    viewport:HookScript("OnSizeChanged",function() view:LayoutSharing() end)
+    local verticalWheel=viewport:GetScript("OnMouseWheel")
+    viewport:SetScript("OnMouseWheel",function(frame,delta)
+        if IsShiftKeyDown and IsShiftKeyDown() then
+            frame:SetHorizontalScroll(math.max(0,math.min(panel:GetWidth()-frame:GetWidth(),frame:GetHorizontalScroll()-delta*40)))
+        else verticalWheel(frame,delta) end
+    end)
+    local subBar=CreateFrame("Frame",nil,view.content); view.sharingSubBar=subBar
     subBar:SetPoint("TOPLEFT",view.rail,"BOTTOMLEFT",0,0)
     subBar:SetPoint("TOPRIGHT",view.rail,"BOTTOMRIGHT",0,0); subBar:SetHeight(30)
     local black=subBar:CreateTexture(nil,"BACKGROUND"); black:SetAllPoints()
@@ -356,7 +438,7 @@ function app:BuildSharingWindow()
     receiveHint:SetHeight(40); receiveHint:SetWordWrap(true)
 
     local send=CreateFrame("Frame",nil,panel); view.sendingPanel=send
-    send:SetPoint("TOPLEFT",0,-38); send:SetPoint("BOTTOMRIGHT",0,88)
+    send:SetPoint("TOPLEFT"); send:SetPoint("BOTTOMRIGHT",0,88)
     view.sharingGroup=label(send,"",true); view.sharingGroup:SetPoint("TOPLEFT"); view.sharingGroup:SetPoint("TOPRIGHT"); view.sharingGroup:SetHeight(28)
     local sendDivider=divider(send); view.sendDivider=sendDivider
     sendDivider:SetPoint("TOPLEFT",0,-36); sendDivider:SetPoint("TOPRIGHT",0,-36)
@@ -377,7 +459,7 @@ function app:BuildSharingWindow()
     view.sendNoteButton:SetPoint("TOPRIGHT",0,-78)
 
     local receive=CreateFrame("Frame",nil,panel); view.receivingPanel=receive
-    receive:SetPoint("TOPLEFT",0,-38); receive:SetPoint("BOTTOMRIGHT",0,100)
+    receive:SetPoint("TOPLEFT"); receive:SetPoint("BOTTOMRIGHT",0,100)
     local receiveDivider=divider(receive); view.receiveDivider=receiveDivider
     receiveDivider:SetPoint("TOPLEFT",0,-36); receiveDivider:SetPoint("TOPRIGHT",0,-36)
     view.durationButton=button(receive,"",130,function()
@@ -441,12 +523,13 @@ function app:BuildSharingWindow()
     editor:SetScript("OnHyperlinkClick",function(_,link,text,mouseButton) if SetItemRef then SetItemRef(link,text,mouseButton) end end)
     local function confirm(_,data) if data then share:Reject(data.block,data.note) end end
     StaticPopupDialogs.SIMPLENOTEPAD_REJECT={
-        text=L["Reject note %s?"],button1=YES,button2=NO,OnAccept=confirm,
+        text=L["Reject note %s?"],button1=app.forceEnglish and "Yes" or YES,button2=app.forceEnglish and "No" or NO,OnAccept=confirm,
         timeout=0,whileDead=true,hideOnEscape=true,
     }
     StaticPopupDialogs.SIMPLENOTEPAD_BLOCK={
-        text=L["Block %s until reload and discard their pending notes?"],button1=YES,button2=NO,OnAccept=confirm,
+        text=L["Block %s until reload and discard their pending notes?"],button1=app.forceEnglish and "Yes" or YES,button2=app.forceEnglish and "No" or NO,OnAccept=confirm,
         timeout=0,whileDead=true,hideOnEscape=true,
     }
-    panel:Hide()
+    view.sharingReady=true
+    viewport:Hide(); subBar:Hide()
 end
