@@ -1,84 +1,74 @@
 local _, app = ...
 local keys = {
     "Notes", "Note %d", "Show/hide SimpleNotepad", "Search notes", "No matching notes",
-    "Close tab temporarily", "Rename note", "Permanently delete note", "All notes",
-    "Previous note", "Next note", "Undo (Ctrl+Z)", "Redo (Ctrl+Y)", "Close", "Minimize",
+    "Close tab temporarily", "Rename note", "Permanently delete note", "All notes", "Previous note",
+    "Next note", "Undo (Ctrl+Z)", "Redo (Ctrl+Y)", "Close", "Minimize",
     "Settings", "Auto-hide toolbar", "New note", "Close settings", "Rename note (Enter to save)",
-    "Window opacity", "Window scale", "Minimap icon: on", "Minimap icon: off",
-    "Restore SimpleNotepad", "Resize", "Permanently delete this note?",
+    "Window opacity", "Window scale", "Restore SimpleNotepad", "Resize", "Permanently delete this note?",
 }
 local translations = {
     deDE = {
         "Notizen", "Notiz %d", "SimpleNotepad anzeigen/ausblenden", "Notizen durchsuchen", "Keine passenden Notizen",
-        "Tab vorübergehend schließen", "Notiz umbenennen", "Notiz endgültig löschen", "Alle Notizen",
-        "Vorherige Notiz", "Nächste Notiz", "Rückgängig (Strg+Z)", "Wiederholen (Strg+Y)", "Schließen", "Minimieren",
+        "Tab vorübergehend schließen", "Notiz umbenennen", "Notiz endgültig löschen", "Alle Notizen", "Vorherige Notiz",
+        "Nächste Notiz", "Rückgängig (Strg+Z)", "Wiederholen (Strg+Y)", "Schließen", "Minimieren",
         "Einstellungen", "Werkzeugleiste automatisch ausblenden", "Neue Notiz", "Einstellungen schließen", "Notiz umbenennen (Enter zum Speichern)",
-        "Deckkraft des Fensters", "Fensterskalierung", "Minikarten-Symbol: an", "Minikarten-Symbol: aus",
-        "SimpleNotepad wiederherstellen", "Größe ändern", "Diese Notiz endgültig löschen?",
+        "Deckkraft des Fensters", "Fensterskalierung", "SimpleNotepad wiederherstellen", "Größe ändern", "Diese Notiz endgültig löschen?",
     },
     frFR = {
         "Notes", "Note %d", "Afficher/masquer SimpleNotepad", "Rechercher des notes", "Aucune note correspondante",
-        "Fermer temporairement l’onglet", "Renommer la note", "Supprimer définitivement la note", "Toutes les notes",
-        "Note précédente", "Note suivante", "Annuler (Ctrl+Z)", "Rétablir (Ctrl+Y)", "Fermer", "Réduire",
+        "Fermer temporairement l’onglet", "Renommer la note", "Supprimer définitivement la note", "Toutes les notes", "Note précédente",
+        "Note suivante", "Annuler (Ctrl+Z)", "Rétablir (Ctrl+Y)", "Fermer", "Réduire",
         "Paramètres", "Masquer automatiquement la barre d’outils", "Nouvelle note", "Fermer les paramètres", "Renommer la note (Entrée pour enregistrer)",
-        "Opacité de la fenêtre", "Échelle de la fenêtre", "Icône de minicarte : activée", "Icône de minicarte : désactivée",
-        "Restaurer SimpleNotepad", "Redimensionner", "Supprimer définitivement cette note ?",
+        "Opacité de la fenêtre", "Échelle de la fenêtre", "Restaurer SimpleNotepad", "Redimensionner", "Supprimer définitivement cette note ?",
     },
     esES = {
         "Notas", "Nota %d", "Mostrar/ocultar SimpleNotepad", "Buscar notas", "No se encontraron notas",
-        "Cerrar pestaña temporalmente", "Renombrar nota", "Eliminar nota permanentemente", "Todas las notas",
-        "Nota anterior", "Nota siguiente", "Deshacer (Ctrl+Z)", "Rehacer (Ctrl+Y)", "Cerrar", "Minimizar",
+        "Cerrar pestaña temporalmente", "Renombrar nota", "Eliminar nota permanentemente", "Todas las notas", "Nota anterior",
+        "Nota siguiente", "Deshacer (Ctrl+Z)", "Rehacer (Ctrl+Y)", "Cerrar", "Minimizar",
         "Ajustes", "Ocultar automáticamente la barra", "Nueva nota", "Cerrar ajustes", "Renombrar nota (Intro para guardar)",
-        "Opacidad de la ventana", "Escala de la ventana", "Icono del minimapa: activado", "Icono del minimapa: desactivado",
-        "Restaurar SimpleNotepad", "Cambiar tamaño", "¿Eliminar esta nota permanentemente?",
+        "Opacidad de la ventana", "Escala de la ventana", "Restaurar SimpleNotepad", "Cambiar tamaño", "¿Eliminar esta nota permanentemente?",
     },
     ptBR = {
         "Notas", "Nota %d", "Mostrar/ocultar SimpleNotepad", "Pesquisar notas", "Nenhuma nota encontrada",
-        "Fechar aba temporariamente", "Renomear nota", "Excluir nota permanentemente", "Todas as notas",
-        "Nota anterior", "Próxima nota", "Desfazer (Ctrl+Z)", "Refazer (Ctrl+Y)", "Fechar", "Minimizar",
+        "Fechar aba temporariamente", "Renomear nota", "Excluir nota permanentemente", "Todas as notas", "Nota anterior",
+        "Próxima nota", "Desfazer (Ctrl+Z)", "Refazer (Ctrl+Y)", "Fechar", "Minimizar",
         "Configurações", "Ocultar barra automaticamente", "Nova nota", "Fechar configurações", "Renomear nota (Enter para salvar)",
-        "Opacidade da janela", "Escala da janela", "Ícone do minimapa: ativado", "Ícone do minimapa: desativado",
-        "Restaurar SimpleNotepad", "Redimensionar", "Excluir esta nota permanentemente?",
+        "Opacidade da janela", "Escala da janela", "Restaurar SimpleNotepad", "Redimensionar", "Excluir esta nota permanentemente?",
     },
     itIT = {
         "Note", "Nota %d", "Mostra/nascondi SimpleNotepad", "Cerca note", "Nessuna nota trovata",
-        "Chiudi temporaneamente la scheda", "Rinomina nota", "Elimina nota definitivamente", "Tutte le note",
-        "Nota precedente", "Nota successiva", "Annulla (Ctrl+Z)", "Ripristina (Ctrl+Y)", "Chiudi", "Riduci a icona",
+        "Chiudi temporaneamente la scheda", "Rinomina nota", "Elimina nota definitivamente", "Tutte le note", "Nota precedente",
+        "Nota successiva", "Annulla (Ctrl+Z)", "Ripristina (Ctrl+Y)", "Chiudi", "Riduci a icona",
         "Impostazioni", "Nascondi automaticamente la barra", "Nuova nota", "Chiudi impostazioni", "Rinomina nota (Invio per salvare)",
-        "Opacità finestra", "Scala finestra", "Icona minimappa: attiva", "Icona minimappa: disattiva",
-        "Ripristina SimpleNotepad", "Ridimensiona", "Eliminare definitivamente questa nota?",
+        "Opacità finestra", "Scala finestra", "Ripristina SimpleNotepad", "Ridimensiona", "Eliminare definitivamente questa nota?",
     },
     ruRU = {
         "Заметки", "Заметка %d", "Показать/скрыть SimpleNotepad", "Поиск заметок", "Заметки не найдены",
-        "Временно закрыть вкладку", "Переименовать заметку", "Удалить заметку навсегда", "Все заметки",
-        "Предыдущая заметка", "Следующая заметка", "Отменить (Ctrl+Z)", "Повторить (Ctrl+Y)", "Закрыть", "Свернуть",
+        "Временно закрыть вкладку", "Переименовать заметку", "Удалить заметку навсегда", "Все заметки", "Предыдущая заметка",
+        "Следующая заметка", "Отменить (Ctrl+Z)", "Повторить (Ctrl+Y)", "Закрыть", "Свернуть",
         "Настройки", "Автоматически скрывать панель", "Новая заметка", "Закрыть настройки", "Переименовать заметку (Enter для сохранения)",
-        "Непрозрачность окна", "Масштаб окна", "Значок у миникарты: вкл.", "Значок у миникарты: выкл.",
-        "Восстановить SimpleNotepad", "Изменить размер", "Удалить эту заметку навсегда?",
+        "Непрозрачность окна", "Масштаб окна", "Восстановить SimpleNotepad", "Изменить размер", "Удалить эту заметку навсегда?",
     },
     koKR = {
         "메모", "메모 %d", "SimpleNotepad 표시/숨기기", "메모 검색", "일치하는 메모 없음",
-        "탭 임시 닫기", "메모 이름 변경", "메모 영구 삭제", "모든 메모",
-        "이전 메모", "다음 메모", "실행 취소 (Ctrl+Z)", "다시 실행 (Ctrl+Y)", "닫기", "최소화",
+        "탭 임시 닫기", "메모 이름 변경", "메모 영구 삭제", "모든 메모", "이전 메모",
+        "다음 메모", "실행 취소 (Ctrl+Z)", "다시 실행 (Ctrl+Y)", "닫기", "최소화",
         "설정", "도구 모음 자동 숨기기", "새 메모", "설정 닫기", "메모 이름 변경 (Enter로 저장)",
-        "창 불투명도", "창 배율", "미니맵 아이콘: 켜짐", "미니맵 아이콘: 꺼짐",
-        "SimpleNotepad 복원", "크기 조절", "이 메모를 영구 삭제할까요?",
+        "창 불투명도", "창 배율", "SimpleNotepad 복원", "크기 조절", "이 메모를 영구 삭제할까요?",
     },
     zhCN = {
         "笔记", "笔记 %d", "显示/隐藏 SimpleNotepad", "搜索笔记", "未找到匹配笔记",
-        "暂时关闭标签", "重命名笔记", "永久删除笔记", "所有笔记",
-        "上一篇笔记", "下一篇笔记", "撤销（Ctrl+Z）", "重做（Ctrl+Y）", "关闭", "最小化",
+        "暂时关闭标签", "重命名笔记", "永久删除笔记", "所有笔记", "上一篇笔记",
+        "下一篇笔记", "撤销（Ctrl+Z）", "重做（Ctrl+Y）", "关闭", "最小化",
         "设置", "自动隐藏工具栏", "新建笔记", "关闭设置", "重命名笔记（回车保存）",
-        "窗口不透明度", "窗口缩放", "小地图图标：开", "小地图图标：关",
-        "还原 SimpleNotepad", "调整大小", "永久删除这篇笔记？",
+        "窗口不透明度", "窗口缩放", "还原 SimpleNotepad", "调整大小", "永久删除这篇笔记？",
     },
     zhTW = {
         "筆記", "筆記 %d", "顯示/隱藏 SimpleNotepad", "搜尋筆記", "找不到相符筆記",
-        "暫時關閉分頁", "重新命名筆記", "永久刪除筆記", "所有筆記",
-        "上一篇筆記", "下一篇筆記", "復原（Ctrl+Z）", "重做（Ctrl+Y）", "關閉", "最小化",
+        "暫時關閉分頁", "重新命名筆記", "永久刪除筆記", "所有筆記", "上一篇筆記",
+        "下一篇筆記", "復原（Ctrl+Z）", "重做（Ctrl+Y）", "關閉", "最小化",
         "設定", "自動隱藏工具列", "新增筆記", "關閉設定", "重新命名筆記（Enter 儲存）",
-        "視窗不透明度", "視窗縮放", "小地圖圖示：開", "小地圖圖示：關",
-        "還原 SimpleNotepad", "調整大小", "永久刪除這篇筆記？",
+        "視窗不透明度", "視窗縮放", "還原 SimpleNotepad", "調整大小", "永久刪除這篇筆記？",
     },
 }
 translations.esMX = translations.esES
@@ -88,64 +78,44 @@ local strings = setmetatable({}, {__index = function(_,key) return key end})
 for index,key in ipairs(keys) do strings[key] = selected and selected[index] or key end
 local extraKeys = {
     "Name for the new note", "Save", "Cancel", "Background color", "Accent color",
-    "Reset appearance", "Style: WoW", "Style: modern", "Lock window", "Unlock window",
-    "Minimized button: icon", "Minimized button: SNP", "Hold, then drag to reorder",
-    "Drag left or right to reorder", "Click to open. Drag to move.",
+    "Hold, then drag to reorder", "Drag left or right to reorder", "Click to open. Drag to move.",
 }
 local extraTranslations = {
     deDE = {
         "Name der neuen Notiz", "Speichern", "Abbrechen", "Hintergrundfarbe", "Akzentfarbe",
-        "Darstellung zurücksetzen", "Stil: WoW", "Stil: Modern", "Fenster sperren", "Fenster entsperren",
-        "Minimiertes Fenster: Icon", "Minimiertes Fenster: SNP", "Gedrückt halten, dann zum Sortieren ziehen",
-        "Zum Sortieren nach links oder rechts ziehen", "Klicken zum Öffnen. Ziehen zum Verschieben.",
+        "Gedrückt halten, dann zum Sortieren ziehen", "Zum Sortieren nach links oder rechts ziehen", "Klicken zum Öffnen. Ziehen zum Verschieben.",
     },
     frFR = {
         "Nom de la nouvelle note", "Enregistrer", "Annuler", "Couleur de fond", "Couleur d’accent",
-        "Réinitialiser l’apparence", "Style : WoW", "Style : moderne", "Verrouiller la fenêtre", "Déverrouiller la fenêtre",
-        "Bouton réduit : icône", "Bouton réduit : SNP", "Maintenir, puis glisser pour réorganiser",
-        "Glisser à gauche ou à droite pour réorganiser", "Cliquer pour ouvrir. Glisser pour déplacer.",
+        "Maintenir, puis glisser pour réorganiser", "Glisser à gauche ou à droite pour réorganiser", "Cliquer pour ouvrir. Glisser pour déplacer.",
     },
     esES = {
         "Nombre de la nueva nota", "Guardar", "Cancelar", "Color de fondo", "Color de acento",
-        "Restablecer apariencia", "Estilo: WoW", "Estilo: moderno", "Bloquear ventana", "Desbloquear ventana",
-        "Botón minimizado: icono", "Botón minimizado: SNP", "Mantén pulsado y arrastra para ordenar",
-        "Arrastra a izquierda o derecha para ordenar", "Haz clic para abrir. Arrastra para mover.",
+        "Mantén pulsado y arrastra para ordenar", "Arrastra a izquierda o derecha para ordenar", "Haz clic para abrir. Arrastra para mover.",
     },
     ptBR = {
         "Nome da nova nota", "Salvar", "Cancelar", "Cor de fundo", "Cor de destaque",
-        "Redefinir aparência", "Estilo: WoW", "Estilo: moderno", "Bloquear janela", "Desbloquear janela",
-        "Botão minimizado: ícone", "Botão minimizado: SNP", "Segure e arraste para reordenar",
-        "Arraste para a esquerda ou direita para reordenar", "Clique para abrir. Arraste para mover.",
+        "Segure e arraste para reordenar", "Arraste para a esquerda ou direita para reordenar", "Clique para abrir. Arraste para mover.",
     },
     itIT = {
         "Nome della nuova nota", "Salva", "Annulla", "Colore di sfondo", "Colore di risalto",
-        "Ripristina aspetto", "Stile: WoW", "Stile: moderno", "Blocca finestra", "Sblocca finestra",
-        "Pulsante ridotto: icona", "Pulsante ridotto: SNP", "Tieni premuto e trascina per riordinare",
-        "Trascina a sinistra o a destra per riordinare", "Clicca per aprire. Trascina per spostare.",
+        "Tieni premuto e trascina per riordinare", "Trascina a sinistra o a destra per riordinare", "Clicca per aprire. Trascina per spostare.",
     },
     ruRU = {
         "Название новой заметки", "Сохранить", "Отмена", "Цвет фона", "Цвет акцента",
-        "Сбросить оформление", "Стиль: WoW", "Стиль: современный", "Закрепить окно", "Открепить окно",
-        "Кнопка свёрнутого окна: значок", "Кнопка свёрнутого окна: SNP", "Удерживайте и перетащите для сортировки",
-        "Перетащите влево или вправо для сортировки", "Нажмите, чтобы открыть. Перетащите, чтобы переместить.",
+        "Удерживайте и перетащите для сортировки", "Перетащите влево или вправо для сортировки", "Нажмите, чтобы открыть. Перетащите, чтобы переместить.",
     },
     koKR = {
         "새 메모 이름", "저장", "취소", "배경색", "강조색",
-        "모양 초기화", "스타일: WoW", "스타일: 모던", "창 잠금", "창 잠금 해제",
-        "최소화 버튼: 아이콘", "최소화 버튼: SNP", "길게 누른 뒤 끌어서 순서 변경",
-        "왼쪽이나 오른쪽으로 끌어서 순서 변경", "클릭하여 열기. 끌어서 이동.",
+        "길게 누른 뒤 끌어서 순서 변경", "왼쪽이나 오른쪽으로 끌어서 순서 변경", "클릭하여 열기. 끌어서 이동.",
     },
     zhCN = {
         "新笔记名称", "保存", "取消", "背景颜色", "强调色",
-        "重置外观", "风格：WoW", "风格：现代", "锁定窗口", "解锁窗口",
-        "最小化按钮：图标", "最小化按钮：SNP", "长按后拖动以排序",
-        "向左或向右拖动以排序", "点击打开，拖动移动。",
+        "长按后拖动以排序", "向左或向右拖动以排序", "点击打开，拖动移动。",
     },
     zhTW = {
         "新筆記名稱", "儲存", "取消", "背景顏色", "強調色",
-        "重設外觀", "風格：WoW", "風格：現代", "鎖定視窗", "解鎖視窗",
-        "最小化按鈕：圖示", "最小化按鈕：SNP", "長按後拖曳以排序",
-        "向左或向右拖曳以排序", "點擊開啟，拖曳移動。",
+        "長按後拖曳以排序", "向左或向右拖曳以排序", "點擊開啟，拖曳移動。",
     },
 }
 extraTranslations.esMX = extraTranslations.esES
@@ -225,7 +195,7 @@ local networkStrings = {
     ["Received by %d players."] = "Bei %d Spielern eingegangen.",
     ["Sent. Waiting for receipt confirmations..."] = "Gesendet. Warte auf Empfangsbestätigungen...",
     ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "Keine Empfangsbestätigung. Empfänger müssen im Tab \"Empfangen\" den Empfang aktivieren, um Notizen zu erhalten.",
-    ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "Sende eine ausgefüllte Notiz (Titel bis 128 Bytes, Text bis 32 KB).",
+    ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "Sende eine ausgefüllte Notiz (Titel bis %d Bytes, Text bis %d KB).",
     ["Note sharing is unavailable on this client."] = "Notizversand ist auf diesem Client momentan nicht verfügbar.",
     ["Note sharing API is missing on this client."] = "Die Schnittstelle zum Notizversand fehlt auf diesem Client.",
     ["Note sharing API error: %s"] = "Fehler beim Notizversand: %s",
@@ -287,7 +257,7 @@ local networkTranslations = {
         ["Received by %d players."] = "Reçue par %d joueurs.",
         ["Sent. Waiting for receipt confirmations..."] = "Envoyée. En attente des confirmations de réception...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "Aucune confirmation de réception. Les destinataires doivent activer la réception dans l'onglet « Recevoir » pour recevoir des notes.",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "Envoyez une note non vide (titre de 128 octets maximum, texte de 32 Ko maximum).",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "Envoyez une note non vide (titre de %d octets maximum, texte de %d Ko maximum).",
         ["Note sharing is unavailable on this client."] = "Le partage de notes est indisponible sur ce client.",
         ["Note sharing API is missing on this client."] = "L'API de partage de notes est absente de ce client.",
         ["Note sharing API error: %s"] = "Erreur de l'API de partage de notes : %s",
@@ -347,7 +317,7 @@ local networkTranslations = {
         ["Received by %d players."] = "Recibida por %d jugadores.",
         ["Sent. Waiting for receipt confirmations..."] = "Enviada. Esperando confirmaciones de recepción...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "Sin confirmación de recepción. Los destinatarios deben activar la recepción en la pestaña «Recibir» para recibir notas.",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "Envía una nota con contenido (título de hasta 128 bytes y texto de hasta 32 KB).",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "Envía una nota con contenido (título de hasta %d bytes y texto de hasta %d KB).",
         ["Note sharing is unavailable on this client."] = "Compartir notas no está disponible en este cliente.",
         ["Note sharing API is missing on this client."] = "Este cliente no dispone de la API para compartir notas.",
         ["Note sharing API error: %s"] = "Error de la API para compartir notas: %s",
@@ -407,7 +377,7 @@ local networkTranslations = {
         ["Received by %d players."] = "Recebida por %d jogadores.",
         ["Sent. Waiting for receipt confirmations..."] = "Enviada. Aguardando confirmações de recebimento...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "Sem confirmação de recebimento. Os destinatários precisam ativar o recebimento na aba «Receber» para receber notas.",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "Envie uma nota com conteúdo (título de até 128 bytes e texto de até 32 KB).",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "Envie uma nota com conteúdo (título de até %d bytes e texto de até %d KB).",
         ["Note sharing is unavailable on this client."] = "O compartilhamento de notas não está disponível neste cliente.",
         ["Note sharing API is missing on this client."] = "A API de compartilhamento de notas não está disponível neste cliente.",
         ["Note sharing API error: %s"] = "Erro na API de compartilhamento de notas: %s",
@@ -467,7 +437,7 @@ local networkTranslations = {
         ["Received by %d players."] = "Ricevuta da %d giocatori.",
         ["Sent. Waiting for receipt confirmations..."] = "Inviata. In attesa delle conferme di ricezione...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "Nessuna conferma di ricezione. I destinatari devono attivare la ricezione nella scheda «Ricevi» per ricevere le note.",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "Invia una nota con del contenuto (titolo fino a 128 byte e testo fino a 32 KB).",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "Invia una nota con del contenuto (titolo fino a %d byte e testo fino a %d KB).",
         ["Note sharing is unavailable on this client."] = "La condivisione delle note non è disponibile su questo client.",
         ["Note sharing API is missing on this client."] = "L'API di condivisione delle note non è disponibile su questo client.",
         ["Note sharing API error: %s"] = "Errore dell'API di condivisione delle note: %s",
@@ -527,7 +497,7 @@ local networkTranslations = {
         ["Received by %d players."] = "Подтверждений получения: %d.",
         ["Sent. Waiting for receipt confirmations..."] = "Отправлено. Ожидание подтверждений получения...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "Нет подтверждения получения. Для получения заметок участники должны включить приём на вкладке «Приём».",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "Отправьте непустую заметку (заголовок до 128 байт, текст до 32 КБ).",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "Отправьте непустую заметку (заголовок до %d байт, текст до %d КБ).",
         ["Note sharing is unavailable on this client."] = "Обмен заметками недоступен в этом клиенте.",
         ["Note sharing API is missing on this client."] = "В этом клиенте нет API обмена заметками.",
         ["Note sharing API error: %s"] = "Ошибка API обмена заметками: %s",
@@ -587,7 +557,7 @@ local networkTranslations = {
         ["Received by %d players."] = "%d명이 받았습니다.",
         ["Sent. Waiting for receipt confirmations..."] = "전송했습니다. 수신 확인을 기다리는 중...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "수신 확인이 없습니다. 메모를 받으려면 받는 사람이 «받기» 탭에서 수신을 켜야 합니다.",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "내용이 있는 메모를 보내세요 (제목 최대 128바이트, 본문 최대 32KB).",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "내용이 있는 메모를 보내세요 (제목 최대 %d바이트, 본문 최대 %dKB).",
         ["Note sharing is unavailable on this client."] = "이 클라이언트에서는 메모를 공유할 수 없습니다.",
         ["Note sharing API is missing on this client."] = "이 클라이언트에는 메모 공유 API가 없습니다.",
         ["Note sharing API error: %s"] = "메모 공유 API 오류: %s",
@@ -647,7 +617,7 @@ local networkTranslations = {
         ["Received by %d players."] = "%d名玩家已收到。",
         ["Sent. Waiting for receipt confirmations..."] = "已发送。正在等待接收确认...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "未收到接收确认。接收者必须在“接收”标签页中开启接收，才能收到笔记。",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "请发送有内容的笔记（标题不超过128字节，正文不超过32KB）。",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "请发送有内容的笔记（标题不超过%d字节，正文不超过%dKB）。",
         ["Note sharing is unavailable on this client."] = "此客户端暂时无法共享笔记。",
         ["Note sharing API is missing on this client."] = "此客户端缺少笔记共享API。",
         ["Note sharing API error: %s"] = "笔记共享API错误：%s",
@@ -707,7 +677,7 @@ local networkTranslations = {
         ["Received by %d players."] = "%d名玩家已收到。",
         ["Sent. Waiting for receipt confirmations..."] = "已傳送。正在等待接收確認...",
         ["No receipt confirmation. Recipients must enable receiving in the \"Receive\" tab to receive notes."] = "未收到接收確認。接收者必須在「接收」分頁中開啟接收，才能收到筆記。",
-        ["Send a non-empty note (title up to 128 bytes, text up to 32 KB)."] = "請傳送有內容的筆記（標題不超過128位元組，內文不超過32KB）。",
+        ["Send a non-empty note (title up to %d bytes, text up to %d KB)."] = "請傳送有內容的筆記（標題不超過%d位元組，內文不超過%dKB）。",
         ["Note sharing is unavailable on this client."] = "此用戶端暫時無法共用筆記。",
         ["Note sharing API is missing on this client."] = "此用戶端缺少筆記共用API。",
         ["Note sharing API error: %s"] = "筆記共用API錯誤：%s",
@@ -723,37 +693,134 @@ networkTranslations.esMX = networkTranslations.esES
 local network = networkTranslations[language]
 -- Unknown locales retain English; supported locales supply every sharing string.
 for key in pairs(networkStrings) do strings[key] = network and network[key] or key end
-local formattingKeys={"Text color", "Text color: left-click to apply, right-click for palette.", "Select text to apply a color.", "Automatic bullet lists: on", "Automatic bullet lists: off"}
+local formattingKeys={
+    "Text color", "Text color: left-click to apply, right-click for palette.", "Select text to apply a color.",
+}
 local formattingTranslations={
-    deDE={"Textfarbe", "Linksklick zum Anwenden, Rechtsklick für die Palette.", "Markiere Text, um ihn einzufärben.", "Automatische Listen: an", "Automatische Listen: aus"},
-    frFR={"Couleur du texte", "Clic gauche pour appliquer, clic droit pour la palette.", "Sélectionnez le texte à colorer.", "Listes automatiques : oui", "Listes automatiques : non"},
-    esES={"Color del texto", "Clic izquierdo para aplicar, clic derecho para la paleta.", "Selecciona el texto que quieras colorear.", "Listas automáticas: sí", "Listas automáticas: no"},
-    ptBR={"Cor do texto", "Clique esquerdo para aplicar, clique direito para a paleta.", "Selecione o texto para aplicar uma cor.", "Listas automáticas: sim", "Listas automáticas: não"},
-    itIT={"Colore del testo", "Clic sinistro per applicare, clic destro per la tavolozza.", "Seleziona il testo da colorare.", "Elenchi automatici: sì", "Elenchi automatici: no"},
-    ruRU={"Цвет текста", "Левая кнопка — применить, правая — открыть палитру.", "Выделите текст для окрашивания.", "Автосписки: вкл.", "Автосписки: выкл."},
-    koKR={"글자색", "왼쪽 클릭으로 적용, 오른쪽 클릭으로 팔레트 열기.", "색을 적용할 글자를 선택하세요.", "자동 목록: 켜짐", "자동 목록: 꺼짐"},
-    zhCN={"文字颜色", "左键应用，右键打开调色板。", "请选择要着色的文字。", "自动列表：开启", "自动列表：关闭"},
-    zhTW={"文字顏色", "左鍵套用，右鍵開啟調色盤。", "請選取要著色的文字。", "自動清單：開啟", "自動清單：關閉"},
+    deDE={
+        "Textfarbe", "Linksklick zum Anwenden, Rechtsklick für die Palette.", "Markiere Text, um ihn einzufärben.",
+    },
+    frFR={
+        "Couleur du texte", "Clic gauche pour appliquer, clic droit pour la palette.", "Sélectionnez le texte à colorer.",
+    },
+    esES={
+        "Color del texto", "Clic izquierdo para aplicar, clic derecho para la paleta.", "Selecciona el texto que quieras colorear.",
+    },
+    ptBR={
+        "Cor do texto", "Clique esquerdo para aplicar, clique direito para a paleta.", "Selecione o texto para aplicar uma cor.",
+    },
+    itIT={
+        "Colore del testo", "Clic sinistro per applicare, clic destro per la tavolozza.", "Seleziona il testo da colorare.",
+    },
+    ruRU={
+        "Цвет текста", "Левая кнопка — применить, правая — открыть палитру.", "Выделите текст для окрашивания.",
+    },
+    koKR={
+        "글자색", "왼쪽 클릭으로 적용, 오른쪽 클릭으로 팔레트 열기.", "색을 적용할 글자를 선택하세요.",
+    },
+    zhCN={
+        "文字颜色", "左键应用，右键打开调色板。", "请选择要着色的文字。",
+    },
+    zhTW={
+        "文字顏色", "左鍵套用，右鍵開啟調色盤。", "請選取要著色的文字。",
+    },
 }
 formattingTranslations.esMX=formattingTranslations.esES
 local formattingLocale=formattingTranslations[language]
 for index,key in ipairs(formattingKeys) do strings[key]=formattingLocale and formattingLocale[index] or key end
-local navigationKeys={"Previous/next buttons: on", "Previous/next buttons: off"}
-local navigationTranslations={
-    deDE={"Vor-/Zurück-Buttons: an","Vor-/Zurück-Buttons: aus"},
-    frFR={"Boutons précédent/suivant : activés","Boutons précédent/suivant : désactivés"},
-    esES={"Botones anterior/siguiente: sí","Botones anterior/siguiente: no"},
-    ptBR={"Botões anterior/próxima: ativados","Botões anterior/próxima: desativados"},
-    itIT={"Pulsanti precedente/successiva: sì","Pulsanti precedente/successiva: no"},
-    ruRU={"Кнопки назад/вперёд: вкл.","Кнопки назад/вперёд: выкл."},
-    koKR={"이전/다음 버튼: 켜짐","이전/다음 버튼: 꺼짐"},
-    zhCN={"上一条/下一条按钮：开启","上一条/下一条按钮：关闭"},
-    zhTW={"上一則/下一則按鈕：開啟","上一則/下一則按鈕：關閉"},
+local settingsKeys = {"Minimap icon","Minimized button","Window lock","Style","Appearance","Automatic bullet lists","Previous/next buttons","On","Off","Icon","Modern","Reset"}
+local settingsTranslations = {
+    deDE={"Minikarten-Symbol","Minimierter Button","Fenstersperre","Stil","Darstellung","Automatische Aufzählungen","Vor-/Zurück-Buttons","An","Aus","Icon","Modern","Zurücksetzen"},
+    frFR={"Icône de minicarte","Bouton réduit","Verrouillage","Style","Apparence","Listes automatiques","Boutons précédent/suivant","Activé","Désactivé","Icône","Moderne","Réinitialiser"},
+    esES={"Icono del minimapa","Botón minimizado","Bloqueo de ventana","Estilo","Apariencia","Listas automáticas","Botones anterior/siguiente","Activado","Desactivado","Icono","Moderno","Restablecer"},
+    esMX={"Icono del minimapa","Botón minimizado","Bloqueo de ventana","Estilo","Apariencia","Listas automáticas","Botones anterior/siguiente","Activado","Desactivado","Icono","Moderno","Restablecer"},
+    ptBR={"Ícone do minimapa","Botão minimizado","Bloqueio da janela","Estilo","Aparência","Listas automáticas","Botões anterior/próxima","Ativado","Desativado","Ícone","Moderno","Redefinir"},
+    itIT={"Icona minimappa","Pulsante ridotto","Blocco finestra","Stile","Aspetto","Elenchi automatici","Pulsanti precedente/successiva","Attivo","Disattivo","Icona","Moderno","Ripristina"},
+    ruRU={"Значок миникарты","Свёрнутая кнопка","Блокировка окна","Стиль","Оформление","Автоматические списки","Кнопки назад/вперёд","Вкл.","Выкл.","Значок","Современный","Сброс"},
+    koKR={"미니맵 아이콘","최소화 버튼","창 잠금","스타일","모양","자동 목록","이전/다음 버튼","켜짐","꺼짐","아이콘","모던","초기화"},
+    zhCN={"小地图图标","最小化按钮","锁定窗口","风格","外观","自动列表","上一条/下一条按钮","开启","关闭","图标","现代","重置"},
+    zhTW={"小地圖圖示","最小化按鈕","鎖定視窗","風格","外觀","自動清單","上一則/下一則按鈕","開啟","關閉","圖示","現代","重設"},
 }
-navigationTranslations.esMX=navigationTranslations.esES
-local navigationLocale=navigationTranslations[language]
-for index,key in ipairs(navigationKeys) do strings[key]=navigationLocale and navigationLocale[index] or key end
+local resetAppearanceKey="Reset appearance? This selects the Modern style and resets background and accent colors for both styles. Notes and other settings stay unchanged."
+settingsKeys[#settingsKeys+1]=resetAppearanceKey
+local resetAppearanceTranslations={
+    deDE="Aussehen zurücksetzen? Dies aktiviert den modernen Stil und setzt die Hintergrund- und Akzentfarben beider Stile zurück. Notizen und andere Einstellungen bleiben unverändert.",
+    frFR="Réinitialiser l'apparence ? Le style moderne sera activé et les couleurs de fond et d'accent des deux styles seront réinitialisées. Les notes et les autres réglages resteront inchangés.",
+    esES="¿Restablecer la apariencia? Se activará el estilo moderno y se restablecerán los colores de fondo y de acento de ambos estilos. Las notas y los demás ajustes no cambiarán.",
+    esMX="¿Restablecer la apariencia? Se activará el estilo moderno y se restablecerán los colores de fondo y de acento de ambos estilos. Las notas y los demás ajustes no cambiarán.",
+    ptBR="Redefinir a aparência? Isso ativa o estilo moderno e redefine as cores de fundo e de destaque dos dois estilos. As notas e as outras configurações permanecem inalteradas.",
+    itIT="Ripristinare l'aspetto? Verrà attivato lo stile moderno e verranno ripristinati i colori di sfondo e di risalto di entrambi gli stili. Le note e le altre impostazioni resteranno invariate.",
+    ruRU="Сбросить оформление? Будет включён современный стиль и сброшены цвета фона и акцента обоих стилей. Заметки и остальные настройки не изменятся.",
+    koKR="모양을 초기화할까요? 모던 스타일로 전환하고 두 스타일의 배경색과 강조색을 초기화합니다. 메모와 다른 설정은 변경되지 않습니다.",
+    zhCN="重置外观？这将切换到现代风格，并重置两种风格的背景色和强调色。笔记和其他设置保持不变。",
+    zhTW="重設外觀？這會切換到現代風格，並重設兩種風格的背景色和強調色。筆記和其他設定保持不變。",
+}
+for locale,text in pairs(resetAppearanceTranslations) do settingsTranslations[locale][#settingsKeys]=text end
+local settingsLocale = settingsTranslations[language]
+for index,key in ipairs(settingsKeys) do strings[key]=settingsLocale and settingsLocale[index] or key end
 app.L = strings
+local metricsKeys={"Lines: %d · Chars: %d/%d* · %d%%","%dL %d/%d* %d%%",
+    "Up to %d characters per note. The limit is %d bytes; UTF-8 and formatting need additional space. Counts include formatting codes and explicit line breaks, not wrapped lines."}
+local metricsTranslations={
+    deDE={"Zeilen: %d · Zeichen: %d/%d* · %d%%","%dZ %d/%d* %d%%",
+        "Bis zu %d Zeichen pro Notiz. Das Limit beträgt %d Bytes; UTF-8 und Formatierung benötigen zusätzlichen Platz. Gezählt werden auch Formatierungscodes und echte Zeilenumbrüche, keine umgebrochenen Bildschirmzeilen."},
+    frFR={"Lignes : %d · Caractères : %d/%d* · %d%%","%dL %d/%d* %d%%",
+        "Jusqu'à %d caractères par note. La limite est de %d octets ; l'UTF-8 et le formatage prennent plus de place. Les codes de formatage et les sauts de ligne explicites sont comptés, pas les retours visuels."},
+    esES={"Líneas: %d · Caracteres: %d/%d* · %d%%","%dL %d/%d* %d%%",
+        "Hasta %d caracteres por nota. El límite es de %d bytes; UTF-8 y el formato necesitan espacio adicional. Se cuentan los códigos de formato y los saltos de línea explícitos, no el ajuste visual."},
+    esMX={"Líneas: %d · Caracteres: %d/%d* · %d%%","%dL %d/%d* %d%%",
+        "Hasta %d caracteres por nota. El límite es de %d bytes; UTF-8 y el formato necesitan espacio adicional. Se cuentan los códigos de formato y los saltos de línea explícitos, no el ajuste visual."},
+    ptBR={"Linhas: %d · Caracteres: %d/%d* · %d%%","%dL %d/%d* %d%%",
+        "Até %d caracteres por nota. O limite é de %d bytes; UTF-8 e formatação precisam de espaço extra. Códigos de formatação e quebras de linha explícitas são contados, não a quebra visual."},
+    itIT={"Righe: %d · Caratteri: %d/%d* · %d%%","%dR %d/%d* %d%%",
+        "Fino a %d caratteri per nota. Il limite è di %d byte; UTF-8 e formattazione richiedono spazio aggiuntivo. Sono inclusi i codici di formattazione e gli a capo espliciti, non quelli visivi."},
+    ruRU={"Строки: %d · Символы: %d/%d* · %d%%","%dС %d/%d* %d%%",
+        "До %d символов в заметке. Лимит — %d байт; UTF-8 и форматирование занимают дополнительное место. Учитываются коды форматирования и явные разрывы строк, а не переносы по ширине окна."},
+    koKR={"줄: %d · 문자: %d/%d* · %d%%","%d줄 %d/%d* %d%%",
+        "메모당 최대 %d자입니다. 제한은 %d바이트이며 UTF-8과 서식은 추가 공간을 사용합니다. 서식 코드와 직접 입력한 줄바꿈을 포함하며 자동 줄바꿈은 세지 않습니다."},
+    zhCN={"行数：%d · 字符：%d/%d* · %d%%","%d行 %d/%d* %d%%",
+        "每条笔记最多 %d 个字符。限制为 %d 字节；UTF-8 和格式会占用额外空间。计数包括格式代码和手动换行，不包括自动折行。"},
+    zhTW={"行數：%d · 字元：%d/%d* · %d%%","%d行 %d/%d* %d%%",
+        "每則筆記最多 %d 個字元。上限為 %d 位元組；UTF-8 和格式會佔用額外空間。計數包括格式代碼和手動換行，不包括自動折行。"},
+}
+local metricsLocale=metricsTranslations[language]
+for index,key in ipairs(metricsKeys) do strings[key]=metricsLocale and metricsLocale[index] or key end
+local listDisplayTranslations={
+    deDE={"Notiz-Fußzeile","Inhalt: %d%%"},frFR={"Pied de note","Contenu : %d%%"},
+    esES={"Pie de nota","Contenido: %d%%"},esMX={"Pie de nota","Contenido: %d%%"},
+    ptBR={"Rodapé da nota","Conteúdo: %d%%"},itIT={"Piè di nota","Contenuto: %d%%"},
+    ruRU={"Нижняя строка заметки","Содержимое: %d%%"},koKR={"메모 바닥글","내용: %d%%"},
+    zhCN={"笔记页脚","内容：%d%%"},zhTW={"筆記頁尾","內容：%d%%"},
+}
+local listDisplay=listDisplayTranslations[language]
+strings["Note Footer"]=listDisplay and listDisplay[1] or "Note Footer"
+strings["Content: %d%%"]=listDisplay and listDisplay[2] or "Content: %d%%"
+local limitKeys={"Note limit reached (%d).","Title limit: %d bytes.","Text limit: %d KiB per note.","Notebook limit: %d MiB of text.",
+    "Allow about %d seconds to send; delays are possible.","Sending... About %d seconds; delays are possible."}
+local limitTranslations={
+    deDE={"Notizlimit erreicht (%d).","Titel: max. %d Bytes.","Max. %d KiB pro Notiz.","Max. %d MiB Notiztext.",
+        "Versand dauert etwa %d Sekunden; Verzögerungen sind möglich.","Senden... Etwa %d Sekunden; Verzögerungen sind möglich."},
+    frFR={"Limite de notes atteinte (%d).","Titre : %d octets max.","Texte : %d Kio par note.","Carnet : %d Mio de texte max.",
+        "Envoi : environ %d secondes ; des retards sont possibles.","Envoi... Environ %d secondes ; des retards sont possibles."},
+    esES={"Límite de notas alcanzado (%d).","Título: máximo %d bytes.","Máximo %d KiB por nota.","Máximo %d MiB de texto total.",
+        "El envío tarda unos %d segundos; puede haber demoras.","Enviando... Unos %d segundos; puede haber demoras."},
+    esMX={"Límite de notas alcanzado (%d).","Título: máximo %d bytes.","Máximo %d KiB por nota.","Máximo %d MiB de texto total.",
+        "El envío tarda unos %d segundos; puede haber demoras.","Enviando... Unos %d segundos; puede haber demoras."},
+    ptBR={"Limite de notas atingido (%d).","Título: máximo de %d bytes.","Máximo de %d KiB por nota.","Máximo de %d MiB de texto total.",
+        "O envio leva cerca de %d segundos; pode haver atrasos.","Enviando... Cerca de %d segundos; pode haver atrasos."},
+    itIT={"Limite di note raggiunto (%d).","Titolo: massimo %d byte.","Massimo %d KiB per nota.","Massimo %d MiB di testo totale.",
+        "L'invio richiede circa %d secondi; sono possibili ritardi.","Invio... Circa %d secondi; sono possibili ritardi."},
+    ruRU={"Лимит заметок достигнут (%d).","Заголовок: до %d байт.","До %d КиБ на заметку.","Всего до %d МиБ текста.",
+        "Отправка займёт около %d сек.; возможны задержки.","Отправка... Около %d сек.; возможны задержки."},
+    koKR={"메모 한도에 도달했습니다 (%d).","제목: 최대 %d바이트.","메모당 최대 %d KiB.","전체 텍스트 최대 %d MiB.",
+        "전송에 약 %d초가 걸리며 지연될 수 있습니다.","전송 중... 약 %d초가 걸리며 지연될 수 있습니다."},
+    zhCN={"已达到笔记数量上限（%d）。","标题最多 %d 字节。","每条笔记最多 %d KiB。","笔记文本总计最多 %d MiB。",
+        "发送大约需要 %d 秒，可能会有延迟。","正在发送……大约需要 %d 秒，可能会有延迟。"},
+    zhTW={"已達到筆記數量上限（%d）。","標題最多 %d 位元組。","每則筆記最多 %d KiB。","筆記文字總計最多 %d MiB。",
+        "傳送大約需要 %d 秒，可能會有延遲。","正在傳送……大約需要 %d 秒，可能會有延遲。"},
+}
+local limitLocale=limitTranslations[language]
+for index,key in ipairs(limitKeys) do strings[key]=limitLocale and limitLocale[index] or key end
 local bulletTranslations={deDE="Aufzählung",frFR="Liste à puces",esES="Lista con viñetas",esMX="Lista con viñetas",ptBR="Lista com marcadores",itIT="Elenco puntato",ruRU="Маркированный список",koKR="글머리 기호 목록",zhCN="项目符号列表",zhTW="項目符號清單"}
 strings["Bullet list"]=bulletTranslations[language] or "Bullet list"
 

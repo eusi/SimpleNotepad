@@ -107,8 +107,34 @@ function skin:Icon(parent, name)
     return texture
 end
 
+function skin:LimitTooltip(caption,allowed,key,value)
+    if allowed or not key then return caption end
+    local reason=value and string.format(app.L[key],value) or app.L[key]
+    return caption.."\n"..reason
+end
+
+function skin:ButtonTooltip(button)
+    local text=button.tooltip
+    if type(text)=="function" then text=text(button) end
+    if text then
+        GameTooltip:SetOwner(button,"ANCHOR_RIGHT"); GameTooltip:SetText(text)
+        local detail=button.tooltipDetail
+        if type(detail)=="function" then detail=detail(button) end
+        if detail then GameTooltip:AddLine(detail,0.65,0.65,0.65,true) end
+        GameTooltip:Show()
+    end
+end
+
+function skin:UpdateLimitButton(button,enabled)
+    button:SetEnabled(enabled); button:SetAlpha(enabled and 1 or 0.4)
+    button.hovered=enabled and button.tooltipHovered or false
+    self:ButtonState(button)
+    if button.tooltipHovered then self:ButtonTooltip(button) end
+end
+
 function skin:Button(parent, icon, tooltip, callback, width, plain)
     local button = CreateFrame("Button", nil, parent)
+    button.tooltip=tooltip
     button.plain=icon ~= nil or plain == true
     button.settings=parent.settingsCard
     button:SetSize(width or (icon and 18 or 28),icon and 18 or 28)
@@ -129,15 +155,13 @@ function skin:Button(parent, icon, tooltip, callback, width, plain)
     if icon then button.icon = self:Icon(button, icon) end
     buttons[#buttons+1]=button
     button:SetScript("OnEnter", function(self)
-        self.hovered=true
-        if not self.plain then skin:Paint(self.fill,skin.colors.hover) end
+        self.tooltipHovered=true; self.hovered=self:IsEnabled()
+        if not self.plain and self.hovered then skin:Paint(self.fill,skin.colors.hover) end
         skin:ButtonState(self)
-        if tooltip then
-            GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:SetText(tooltip); GameTooltip:Show()
-        end
+        skin:ButtonTooltip(self)
     end)
     button:SetScript("OnLeave", function(self)
-        self.hovered=false
+        self.tooltipHovered=false; self.hovered=false
         if not self.plain then skin:Paint(self.fill,self.active and skin.colors.active or skin.colors.button) end
         skin:ButtonState(self)
         GameTooltip:Hide()
@@ -160,6 +184,10 @@ function skin:ButtonState(button)
             local offset=(button.hovered and 0.20 or button.active and 0.16 or 0.12)*(self.lightBackground and -1 or 1)
             color={}
             for index=1,3 do color[index]=math.max(0,math.min(1,self.colors.editor[index]+offset)) end
+        end
+        if button.warning then
+            color=self.lightBackground and (button.hovered and {0.86,0.53,0.53} or {0.92,0.65,0.65})
+                or (button.hovered and {0.46,0.22,0.22} or {0.35,0.16,0.16})
         end
         self:Paint(button.fill,color)
     end
@@ -201,12 +229,66 @@ function skin:ScrollFrame(parent)
     local scroll=CreateFrame("ScrollFrame",nil,parent)
     local bar=CreateFrame("Slider",nil,scroll)
     scroll.bar=bar
-    bar:SetOrientation("VERTICAL"); bar:EnableMouse(true)
+    bar:SetOrientation("VERTICAL"); bar:EnableMouse(false)
     bar:SetPoint("TOPLEFT",scroll,"TOPRIGHT",4,0)
     bar:SetPoint("BOTTOMLEFT",scroll,"BOTTOMRIGHT",4,0)
     self:Fill(bar,self.colors.rail)
     bar:SetThumbTexture("Interface\\Buttons\\WHITE8X8")
-    bar:SetValueStep(1); app.platform:Slider(bar)
+    bar:SetValueStep(0.01); app.platform:Slider(bar)
+    -- Native Slider dragging can disagree with a variable-sized scroll thumb.
+    -- Capture mouse input separately and map movement over the actual travel.
+    local input=CreateFrame("Button",nil,bar)
+    bar.dragInput=input;input:SetAllPoints(bar);input:EnableMouse(true)
+    input:SetFrameLevel(bar:GetFrameLevel()+1)
+    function scroll:StopBarDrag()
+        input.drag=nil;input:SetScript("OnUpdate",nil)
+    end
+    local function geometry()
+        local height=bar:GetHeight()
+        return scroll:VerticalRange(),math.max(0,height-bar:GetThumbTexture():GetHeight()),bar:GetEffectiveScale(),bar:GetTop()
+    end
+    local function moveThumb(button)
+        local drag=button.drag
+        if not drag then return end
+        local range,travel,scale,top=geometry()
+        if range<=0 or travel<=0 or not top then scroll:StopBarDrag();return end
+        local _,cursorY=GetCursorPosition();local y=cursorY/scale
+        local current=scroll:GetVerticalScroll()
+        local rebase=range~=drag.range or travel~=drag.travel or scale~=drag.scale or top~=drag.top or current~=drag.last
+        local value
+        if rebase then
+            -- Retain this frame's physical movement even while layout changes.
+            value=current+(drag.cursorY-cursorY)/scale*range/travel
+            drag.range,drag.travel,drag.scale,drag.top=range,travel,scale,top
+        else
+            value=drag.value+(drag.y-y)*range/travel
+        end
+        scroll:SetVerticalScroll(math.max(0,math.min(range,value)))
+        drag.last=scroll:GetVerticalScroll()
+        drag.cursorY=cursorY
+        if rebase then drag.y,drag.value=y,drag.last end
+    end
+    input:SetScript("OnMouseDown",function(button,mouseButton)
+        if mouseButton~="LeftButton" then return end
+        local range,travel,scale,top=geometry()
+        if range<=0 or travel<=0 or not top then return end
+        local _,cursorY=GetCursorPosition();local y=cursorY/scale
+        local thumb=bar:GetThumbTexture()
+        local thumbTop=thumb:GetTop()
+        if not thumbTop then return end
+        if y>thumbTop or y<thumbTop-thumb:GetHeight() then
+            scroll:SetVerticalScroll(math.max(0,math.min(range,(top-y-thumb:GetHeight()/2)*range/travel)))
+        end
+        button.drag={y=y,cursorY=cursorY,value=scroll:GetVerticalScroll(),last=scroll:GetVerticalScroll(),range=range,travel=travel,scale=scale,top=top}
+        button:SetScript("OnUpdate",function(frame)
+            if not IsMouseButtonDown("LeftButton") then scroll:StopBarDrag();return end
+            moveThumb(frame)
+        end)
+    end)
+    input:SetScript("OnMouseUp",function(button,mouseButton)
+        if mouseButton=="LeftButton" then moveThumb(button);scroll:StopBarDrag() end
+    end)
+    input:SetScript("OnHide",function() scroll:StopBarDrag() end)
     function scroll:VerticalRange()
         if self.contentHeight then
             -- Explicit frame layouts need no cached native scroll-range query.
@@ -225,8 +307,10 @@ function skin:ScrollFrame(parent)
         bar:SetValue(value)
         if value ~= self:GetVerticalScroll() then self:SetVerticalScroll(value) end
         bar:SetShown(range > 0)
+        if range<=0 then self:StopBarDrag() end
         local height=math.max(1,self:GetHeight())
         local thumbHeight=skin.wow and math.min(24,height) or math.min(height,math.max(18,height*height/(height+range)))
+        thumbHeight=math.min(thumbHeight,math.max(1,height-8))
         bar:GetThumbTexture():SetSize(skin.wow and 14 or 6,thumbHeight)
         self.syncing=false
     end

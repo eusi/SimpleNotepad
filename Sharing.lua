@@ -1,5 +1,6 @@
 local _, app = ...
 local L, book = app.L, app.journal
+local limits=app.limits
 local share = {inbox = {}, transfers = {}, blocked = {}, recent = {}, seen = {}}
 app.sharing = share
 local PREFIX, CHUNK, LIMIT = "SNP_NOTE1", 200, 32902
@@ -59,9 +60,43 @@ function share:Changed()
     if app.SharingChanged then app:SharingChanged() end
 end
 
-function share:Status(key)
+function share:Status(key,...)
     self.receiptDisplay=nil
-    self.status=L[key]; self:Changed()
+    self.status=select("#",...)>0 and string.format(L[key],...) or L[key]; self:Changed()
+    if app.view and (key=="Note limit reached (%d)." or key=="Title limit: %d bytes."
+        or key=="Text limit: %d KiB per note." or key=="Notebook limit: %d MiB of text."
+        or key=="Send a non-empty note (title up to %d bytes, text up to %d KB).") then
+        app.view:ShowLimit(key,...)
+    end
+end
+
+function share:SendLimits()
+    -- The published version-1 receiver has fixed wire bounds.
+    return math.min(limits.titleBytes,128),math.min(limits.noteBytes,32768)
+end
+
+function share:CanSend(page)
+    local titleBytes,noteBytes=self:SendLimits()
+    return page and type(page.name)=="string" and type(page.body)=="string"
+        and #page.name<=titleBytes and #page.body<=noteBytes
+        and page.name:find("%S") and page.body:find("%S")
+end
+
+function share:Estimate(page)
+    if not page or type(page.name)~="string" or type(page.body)~="string" then return end
+    local _,newlines=page.body:gsub("\n","")
+    if #page.body<=limits.estimateBytes and newlines+1<=limits.estimateLines then return end
+    local payload=#tostring(#page.name)+1+#page.name+#page.body
+    local chunks=math.ceil(payload*2/CHUNK)
+    -- Reserve the longest valid transfer ID, framing and a conservative wire overhead.
+    local cost=payload*2+chunks*(#PREFIX+limits.packetOverhead+6+24+#tostring(chunks))+80
+    return math.max(5,math.ceil(((cost-limits.sendBurstBytes)/limits.sendBytesPerSecond+1)/5)*5)
+end
+
+function share:SendingStatus(page)
+    local seconds=self:Estimate(page)
+    if seconds then self:Status("Sending... About %d seconds; delays are possible.",seconds)
+    else self:Status("Sending...") end
 end
 
 function share:ReceiptStatus(receipt)
@@ -146,16 +181,28 @@ end
 function share:Accept(note)
     local index=pendingIndex(self.inbox,note)
     if not index then return false end
-    note=table.remove(self.inbox,index)
-    if not note then return false end
+    note=self.inbox[index]
+    local allowed,key,value=book:CanAdd(note.body)
+    if not allowed then self:Status(key,value); return false end
     -- Recheck after removing the pending entry: the notebook may have changed.
+    -- Ignore this inbox entry while checking for duplicates.
+    table.remove(self.inbox,index)
     if self:Duplicate(note.body) then self:Status("This note already exists."); return false end
     local name,base,suffix=note.name,note.name,2
     local function exists(value)
         for _,page in ipairs(book.data.pages) do if page.name==value then return true end end
     end
-    while exists(name) do name=base.." ("..suffix..")"; suffix=suffix+1 end
-    book:Add(name); book:Current().body=note.body
+    while exists(name) do
+        local ending=" ("..suffix..")"
+        local bytes,parts=0,{}
+        for character in base:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
+            if bytes+#character+#ending>limits.titleBytes then break end
+            parts[#parts+1]=character; bytes=bytes+#character
+        end
+        name=table.concat(parts)..ending; suffix=suffix+1
+    end
+    local added,reason,amount=book:Add(name,note.body)
+    if not added then table.insert(self.inbox,index,note); self:Status(reason,amount); return false end
     self:Status("Note accepted as a new copy.")
     return true
 end
@@ -185,8 +232,9 @@ function share:Send(page)
     if self.outgoing or self:SendWait()>0 then
         self:Status("Please wait before sending another note."); return false
     end
-    if not page or type(page.name)~="string" or type(page.body)~="string" or #page.name>128 or not page.name:find("%S") or #page.body>32768 or not page.body:find("%S") then
-        self:Status("Send a non-empty note (title up to 128 bytes, text up to 32 KB)."); return false
+    if not self:CanSend(page) then
+        local titleBytes,noteBytes=self:SendLimits()
+        self:Status("Send a non-empty note (title up to %d bytes, text up to %d KB).",titleBytes,noteBytes/1024); return false
     end
     if not self:EnsureReady() then self:TransportError(); return false end
     local payload=#page.name.."\n"..page.name..page.body
@@ -200,8 +248,9 @@ function share:Send(page)
     -- Freeze text and recipients at the click; cancel if the roster changes.
     local roster=self:Roster()
     self.receipt={id=id,channel=channel,roster=roster,senders={},count=0}
-    self.outgoing={packets=packets,index=1,channel=channel,roster=roster,next=now,expires=now+120}
-    self:Status("Sending...")
+    self.outgoing={packets=packets,index=1,channel=channel,roster=roster,next=now,expires=now+120,
+        budget=limits.sendBurstBytes,updated=now,backoff=limits.retryMin}
+    self:SendingStatus(page)
     return true
 end
 
@@ -246,7 +295,7 @@ function share:Receive(prefix,message,channel,sender)
         if not size or size<4 or size>LIMIT or #hash>11 or self.transfers[key] then return end
         if self.recent[key] and now-self.recent[key]<RECEIVE_INTERVAL then return end
         local active=0; for _ in pairs(self.transfers) do active=active+1 end
-        if active>=2 or active+#self.inbox>=5 then return end
+        if active>=limits.transfers or active+#self.inbox>=limits.inbox then return end
         if not self.startTime or now-self.startTime>=60 then self.startTime=now; self.starts=0 end
         if self.starts>=5 then return end
         self.starts=self.starts+1; self.recent[key]=now
@@ -280,7 +329,7 @@ function share:Receive(prefix,message,channel,sender)
     -- One bounded reply only after validation and insertion into the inbox.
     -- Use the same group channel; the target prevents cross-talk between senders.
     self.acknowledgements=self.acknowledgements or {}
-    if #self.acknowledgements<5 then
+    if #self.acknowledgements<limits.inbox then
         self.acknowledgements[#self.acknowledgements+1]={
             message="1\tA\t"..id.."\t"..key,channel=channel,roster=self:Roster(),next=now,expires=now+10,
         }
@@ -313,21 +362,31 @@ function share:Tick()
     if now>=outgoing.expires or self:Channel()~=outgoing.channel or self:Roster()~=outgoing.roster then
         self.outgoing=nil; self.receipt=nil; self:Status("Sending cancelled: group changed or transfer expired."); return
     end
-    local result=app.platform:SendNotePacket(PREFIX,outgoing.packets[outgoing.index],outgoing.channel)
-    if result=="retry" then outgoing.next=now+1; return end
-    if not result then
-        self.outgoing=nil
-        self.receipt=nil
-        self:TransportError(); return
-    end
-    -- Start protection only after the API accepts a packet, not on click/retry.
-    -- Keep it after a partial failure: recipients may already have the header.
-    if outgoing.index==1 then self.lastSend=now end
-    outgoing.index=outgoing.index+1; outgoing.next=now+0.15
-    if outgoing.index>#outgoing.packets then
-        self.outgoing=nil
-        self.receipt.deadline=now+8
-        self:ReceiptStatus(self.receipt)
+    outgoing.budget=math.min(limits.sendBurstBytes,outgoing.budget+math.max(0,now-outgoing.updated)*limits.sendBytesPerSecond)
+    outgoing.updated=now
+    for _=1,limits.sendPacketsPerTick do
+        local message=outgoing.packets[outgoing.index]
+        local cost=#PREFIX+#message+limits.packetOverhead
+        if outgoing.budget<cost then return end
+        local result=app.platform:SendNotePacket(PREFIX,message,outgoing.channel)
+        if result=="retry" then
+            outgoing.next=now+outgoing.backoff
+            outgoing.backoff=math.min(limits.retryMax,outgoing.backoff*2)
+            outgoing.budget=0; outgoing.updated=now
+            return
+        end
+        if not result then
+            self.outgoing=nil; self.receipt=nil; self:TransportError(); return
+        end
+        outgoing.budget=outgoing.budget-cost; outgoing.backoff=limits.retryMin
+        local header=outgoing.index==1
+        -- Dispatch the header alone; retain cooldown after any partial failure.
+        if header then self.lastSend=now end
+        outgoing.index=outgoing.index+1; outgoing.next=now
+        if outgoing.index>#outgoing.packets then
+            self.outgoing=nil; self.receipt.deadline=now+8; self:ReceiptStatus(self.receipt); return
+        end
+        if header then return end
     end
 end
 

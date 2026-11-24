@@ -157,7 +157,9 @@ function app:SharingChanged()
     view.receiveSub.count:SetText(count>0 and tostring(count) or "")
     view.receiveSub.count:SetTextColor(unpack(skin.colors.blue))
     self:SharingClockChanged()
-    view.sharingStatus:SetText(share.status or "")
+    if view.shareSelection and not contains(app.journal.data.pages,view.shareSelection) then view.shareSelection=nil end
+    local seconds=view.sharingSection~="receive" and share:Estimate(view.shareSelection)
+    view.sharingStatus:SetText(share.status or (seconds and string.format(L["Allow about %d seconds to send; delays are possible."],seconds)) or "")
     if view.previewNote and not contains(share.inbox,view.previewNote) then view:PreviewIncoming(nil) end
     local receive=view.sharingSection=="receive"
     shown(view.sendingPanel,not receive); shown(view.receivingPanel,receive)
@@ -182,7 +184,9 @@ function view:SharingLists()
         local row=self.sourceRows[index]
         if not row then
             row=button(self.sourceCanvas,"",180,function(control)
-                self.shareSelection=control.page; app:SharingChanged()
+                self.shareSelection=control.page
+                if not share.outgoing and not share.demoSend then share.status=nil; share.receiptDisplay=nil end
+                app:SharingChanged()
             end)
             row.label:ClearAllPoints(); row.label:SetPoint("LEFT",8,0)
             row.label:SetPoint("RIGHT",-28,0); row.label:SetJustifyH("LEFT")
@@ -218,10 +222,13 @@ function view:SharingLists()
             row.open:SetScript("OnLeave",function() GameTooltip:Hide() end)
             row.excerpt=label(row,"",true)
             row.sender=label(row,"",true)
-            row.accept=action(row,"accept",L["Accept"],function()
+            row.accept=action(row,"accept",function()
+                return skin:LimitTooltip(L["Accept"],app.journal:CanAdd(row.note and row.note.body))
+            end,function()
                 if self:CommitRename()==false then return end
                 share:Accept(row.note); self:Refresh()
             end)
+            row.accept:SetMotionScriptsWhileDisabled(true)
             row.reject=action(row,"close",L["Reject"],function() self:ConfirmIncoming(row.note,false) end)
             row.block=action(row,"block",L["Block sender"],function() self:ConfirmIncoming(row.note,true) end)
             local line=CreateFrame("Frame",nil,row); line:SetHeight(1)
@@ -229,6 +236,8 @@ function view:SharingLists()
             self.inboxRows[index]=row
         end
         row.note=note; row.name:SetText(note.name)
+        local canAccept=app.journal:CanAdd(note.body)
+        skin:UpdateLimitButton(row.accept,canAccept)
         row.excerptText=app:SharingExcerpt(note.body)
         row.sender:SetText(note.sender)
         row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-(index-1)*39); row:SetPoint("TOPRIGHT",0,-(index-1)*39)

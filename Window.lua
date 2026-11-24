@@ -31,6 +31,7 @@ function view:Refresh()
     if self.mode~="sharing" and self.previewNote then self:PreviewIncoming(nil) end
     show(self.editorScroll, self.mode == "note")
     show(self.preferences, self.mode == "settings")
+    if self.mode=="settings" then self:LayoutSettings() end
     if self.sharingViewport then
         show(self.sharingViewport,self.mode == "sharing")
         show(self.sharingSubBar,self.mode == "sharing")
@@ -43,10 +44,13 @@ function view:Refresh()
         self:PopulateEditor(body,reenteringNote)
         if reenteringNote then self.pendingEditorRefresh={page=page,body=body} end
     else self.pendingEditorRefresh=nil end
+    local canAdd=book:CanAdd()
+    skin:UpdateLimitButton(self.newNoteButton,canAdd)
     self:Tabs(); self:List()
     if self.mode=="sharing" and app.SharingChanged then app:SharingChanged() end
     self.renderedMode=self.mode
     self.writing=wasWriting
+    self:UpdateNoteMetrics()
 end
 
 function view:PopulateEditor(body,rebuild)
@@ -68,18 +72,38 @@ function view:PopulateEditor(body,rebuild)
     self.writing=wasWriting
 end
 
-function app:CommitNoteInput(editor)
+function app:CommitNoteInput(editor,discrete)
     if editor==view.editor and not view.writing and view.mode=="note" and view.editorPage==book:Current() then
+        local before=book:Current().body
         if view.bulletEnter and view.options.automaticBullets then
             local newlinePosition=view.bulletEnter
             view.bulletEnter=nil
             local text,cursor=app.formatting:ContinueBullet(book:Current().body,editor:GetText(),newlinePosition)
             if text then
+                discrete=true
                 view.writing=true; editor:SetText(text); editor:SetCursorPosition(cursor); view.writing=false
             end
         end
-        book:Record(editor:GetText())
+        local after,cursor=editor:GetText(),editor:GetCursorPosition()
+        local delta,group=#after-#before
+        if not discrete and delta>0 and delta<=4 then
+            local inserted=after:sub(cursor-delta+1,cursor)
+            if inserted~="\n" and inserted~="\r" and inserted:match("^[%z\1-\127\194-\244][\128-\191]*$")
+                and after:sub(1,cursor-delta)==before:sub(1,cursor-delta)
+                and after:sub(cursor+1)==before:sub(cursor-delta+1) then group="type" end
+        elseif not discrete and delta<0 and delta>=-4
+            and after:sub(1,cursor)==before:sub(1,cursor)
+            and after:sub(cursor+1)==before:sub(cursor-delta+1) then group="delete" end
+        local ok,key,value=book:Record(after,group,cursor)
+        if not ok then
+            view.writing=true; editor:SetText(before)
+            editor:SetCursorPosition(math.max(0,math.min(#before,cursor-math.max(0,delta))))
+            view.writing=false; view.colorSelection=nil; view:ShowLimit(key,value)
+        end
         view.pendingEditorRefresh=nil
+        view:UpdateNoteMetrics()
+        if view.picker:IsShown() then view:List() end
+        return ok
     end
 end
 
@@ -87,21 +111,29 @@ function view:CommitRename(cancel)
     if self.creatingNew then
         local name = strip(self.rename:GetText())
         if not cancel and name == "" then self.rename:SetFocus(); return false end
+        if not cancel then
+            local ok,key,value=book:Add(name)
+            if not ok then self:ShowLimit(key,value); return false end
+        end
         self.creatingNew = nil
         self.rename:ClearFocus(); self.renamePanel:Hide()
         if not cancel then
-            book:Add(name); self.mode = "note"; self:Refresh(); self.editor:SetFocus()
+            self.mode = "note"; self:Refresh(); self.editor:SetFocus()
         end
         return true
     end
     if not self.renaming then return end
     local page = self.renaming
-    self.renaming = nil
     if not cancel then
         for index, candidate in ipairs(book.data.pages) do
-            if candidate == page then book:Rename(index, self.rename:GetText()); break end
+            if candidate == page then
+                local ok,key,value=book:Rename(index, self.rename:GetText())
+                if not ok and key then self:ShowLimit(key,value); return false end
+                break
+            end
         end
     end
+    self.renaming = nil
     self.rename:ClearFocus(); self.renamePanel:Hide()
 end
 
@@ -114,10 +146,57 @@ function view:Rename(index)
 end
 
 function view:NewPage()
+    if not book:CanAdd() then self:NoteLimitReached(); return end
     self:CommitRename(true); self:CloseSearch(); self.picker:Hide(); self.editor:ClearFocus()
     self.creatingNew = true
     self.renameTitle:SetText(L["Name for the new note"])
     self.rename:SetText(""); self.renamePanel:Show(); self.rename:SetFocus()
+end
+
+function view:NoteLimitReached()
+    self:ShowLimit("Note limit reached (%d).",app.limits.notes)
+end
+
+function view:ShowLimit(key,...)
+    self.notice:SetText(select("#",...)>0 and string.format(L[key],...) or L[key])
+    self.notice:Hide(); self.noticeTime = nil
+    if self.renamePanel:IsShown() then self.renameTitle:SetText(self.notice:GetText()) end
+    self.editor:ClearFocus()
+    StaticPopup_Show("SIMPLENOTEPAD_LIMIT",self.notice:GetText())
+end
+
+-- Count UTF-8 characters and logical lines; storage usage includes formatting bytes.
+function view:UpdateNoteMetrics()
+    if not self.noteMetrics then return end
+    local visible=self.mode=="note" and self.options.showNoteMetrics
+    self.noteMetrics:SetShown(visible)
+    if not visible then
+        self.editorScroll:SetPoint("BOTTOMRIGHT",-24,self.content:GetHeight()<96 and 8 or 20)
+        if self.metricsHeight~=0 then self.metricsHeight=0;self:Layout() end
+        return
+    end
+    local body=book:Current().body or ""
+    if self.metricsBody~=body then
+        local _,characters=body:gsub("[^\128-\191]","")
+        local _,newlines=body:gsub("\r\n","\n"):gsub("[\r\n]","")
+        self.metricsBody=body
+        self.metricsCharacters,self.metricsLines=characters,body=="" and 0 or newlines+1
+    end
+    local maximum=app.limits.noteBytes
+    local percent=math.floor(#body/maximum*100)
+    local text=string.format(L["Lines: %d · Chars: %d/%d* · %d%%"],self.metricsLines,self.metricsCharacters,maximum,percent)
+    self.noteMetricsMeasure:SetText(text)
+    if self.noteMetricsMeasure:GetStringWidth()>self.noteMetrics:GetWidth()-16 then
+        text=string.format(L["%dL %d/%d* %d%%"],self.metricsLines,self.metricsCharacters,maximum,percent)
+    end
+    self.noteMetricsLabel:SetText(text)
+    self.noteMetricsMeasure:SetText(text)
+    local height=self.noteMetricsMeasure:GetStringWidth()>self.noteMetrics:GetWidth()-16 and 32 or 18
+    self.noteMetricsLabel:SetWordWrap(height>18); self.noteMetricsLabel:SetHeight(height-2)
+    self.noteMetrics:SetHeight(height)
+    self.editorScroll:SetPoint("BOTTOMRIGHT",-24,height+2)
+    if self.metricsHeight~=height then self.metricsHeight=height;self:Layout() end
+    self.noteMetricsLabel:SetTextColor(unpack(percent>=100 and {1,.4,.3} or percent>=90 and {1,.8,.3} or skin.colors.text))
 end
 
 function view:Settings()
@@ -188,7 +267,7 @@ function view:Tabs()
                 button.label = skin:Label(button, "")
                 button.label:SetPoint("LEFT", 8, 0); button.label:SetJustifyH("LEFT")
                 button.sharedIcon = skin:Icon(button,"globe")
-                button.sharedIcon:SetSize(10,10)
+                button.sharedIcon:SetSize(14,14)
                 button.sharedIcon:ClearAllPoints(); button.sharedIcon:SetPoint("LEFT",8,0)
                 button.close = skin:Button(button,"close",L["Close tab temporarily"],function() end,12)
                 button.close:SetPoint("RIGHT", -6,0)
@@ -228,11 +307,11 @@ function view:Tabs()
             local shared=book:IsShared(index)
             show(button.sharedIcon,shared)
             button.sharedIcon:SetVertexColor(unpack(skin.colors.blue))
-            button.label:ClearAllPoints(); button.label:SetPoint("LEFT",shared and 22 or 8,0)
+            button.label:ClearAllPoints(); button.label:SetPoint("LEFT",shared and 26 or 8,0)
             button.label:SetText(page.name)
             button.label:SetWidth(0)
             local nameWidth=math.ceil(button.label:GetStringWidth())
-            local tabWidth=nameWidth+16+(count > 1 and 18 or 0)+(shared and 14 or 0)
+            local tabWidth=nameWidth+16+(count > 1 and 18 or 0)+(shared and 18 or 0)
             button.label:SetWidth(nameWidth)
             button:SetWidth(tabWidth)
             button.label:SetTextColor(unpack(active and skin.colors.text or skin.colors.muted))
@@ -333,7 +412,12 @@ function view:List()
             row = CreateFrame("Frame",nil,self.listBody); row:SetSize(252,32)
             row.open = skin:Button(row,nil,nil,function() end,160)
             row.open:SetPoint("LEFT"); row.label = skin:Label(row.open, "")
-            row.label:SetPoint("LEFT",6,0); row.label:SetWidth(148); row.label:SetJustifyH("LEFT"); row.label:SetWordWrap(false)
+            row.label:SetPoint("LEFT",6,0); row.label:SetJustifyH("LEFT"); row.label:SetWordWrap(false)
+            row.usage=skin:Label(row.open,"")
+            row.usage:SetAlpha(0.65)
+            row.usage:SetPoint("RIGHT",-6,0); row.usage:SetJustifyH("RIGHT"); row.usage:SetWordWrap(false)
+            row.open.tooltip=function() return row.page.name end
+            row.open.tooltipDetail=function() return string.format(L["Content: %d%%"],row.percent) end
             row.share = skin:Button(row,"globe",nil,function() end)
             row.share:SetPoint("RIGHT",-58,0)
             row.share:SetScript("OnEnter",function(button)
@@ -349,7 +433,16 @@ function view:List()
             self.rows[index] = row
         end
         row:SetPoint("TOPLEFT",0,-(index-1)*33)
+        row.page=page
         row.label:SetText((page.open and "* " or "  ")..page.name)
+        local percent=math.floor(#(page.body or "")/app.limits.noteBytes*100)
+        row.percent=percent
+        row.usage:SetText(tostring(percent).."%")
+        self.noteMetricsMeasure:SetText(row.usage:GetText())
+        local usageWidth=math.max(28,math.ceil(self.noteMetricsMeasure:GetStringWidth())+2)
+        row.usage:SetWidth(usageWidth)
+        row.label:SetWidth(math.max(1,row.open:GetWidth()-usageWidth-18))
+        row.usage:SetTextColor(unpack(percent>=100 and {1,.4,.3} or percent>=90 and {1,.8,.3} or skin.colors.text))
         row.shared=book:IsShared(index); row.share.active=row.shared; skin:ButtonState(row.share)
         row.share.icon:SetAlpha(row.shared and 1 or 0.45)
         row.share:SetScript("OnClick",function()
@@ -365,7 +458,13 @@ function view:List()
         end)
         row:Show()
     end
-    self.listBody:SetHeight(math.max(1,#book.data.pages*33))
+    local contentHeight=math.max(1,#book.data.pages*33-1)
+    self.listBody:SetHeight(contentHeight)
+    local height=math.min(10*33-1,contentHeight)+16
+    local gutter=#book.data.pages>10 and (skin.wow and 18 or 10) or 0
+    self.picker:SetSize(268+gutter,height)
+    self.listScroll:SetPoint("BOTTOMRIGHT",-8-gutter,8)
+    self.listScroll:UpdateScrollBar()
 end
 
 -- Layout, saved bounds and open/minimize animation.
@@ -375,7 +474,7 @@ function view:Layout()
     self.content:ClearAllPoints()
     self.content:SetPoint("TOPLEFT",self.root,"TOPLEFT",inset,-inset)
     self.content:SetPoint("BOTTOMRIGHT",self.root,"BOTTOMRIGHT",-inset,inset)
-    local minimum=MIN_HEIGHT+2*inset
+    local minimum=MIN_HEIGHT+2*inset+math.max(0,(self.metricsHeight or 18)-18)
     local minimumWidth=MIN_WIDTH+2*inset
     app.platform:ResizeBounds(self.root,minimumWidth,minimum)
     if self.root:GetWidth()<minimumWidth then
@@ -397,14 +496,22 @@ function view:Layout()
     local width = self.root:GetWidth()-2*inset
     self:LayoutToolbar(width)
     self.tabScroll:SetWidth(math.max(1,width-28))
+    if self.picker then self.picker:SetScale(self.options.scale) end
     if self.editorScroll then
-        self.editorScroll:SetPoint("BOTTOMRIGHT",-24,self.content:GetHeight()<96 and 8 or 20)
+        self.editorScroll:SetPoint("BOTTOMRIGHT",-24,20)
     end
     if self.editor then self.editor:SetWidth(math.max(1,self.editorScroll:GetWidth())) end
+    self:UpdateNoteMetrics()
+    if self.notice then
+        local padding=self.content:GetHeight()<96 and -2 or -12
+        self.notice:SetPoint("TOPLEFT",self.rail,"BOTTOMLEFT",15,padding)
+        self.notice:SetPoint("TOPRIGHT",self.rail,"BOTTOMRIGHT",-15,padding)
+    end
     if self.tabCanvas then self:Tabs() end
     skin:ResizeTextures()
     skin:ButtonState(self.autoButton)
     if self.LayoutSharing then self:LayoutSharing() end
+    if self.settingsCard then self:LayoutSettings() end
 end
 
 function view:ApplyOpacity()
@@ -417,14 +524,14 @@ function view:ApplyLock()
     self.root:SetMovable(unlocked); self.root:SetResizable(unlocked)
     if self.badge then self.badge:StopMovingOrSizing(); self.badge:SetMovable(unlocked) end
     if self.grip then show(self.grip,unlocked) end
-    if self.lockButton then self.lockButton.label:SetText(unlocked and L["Lock window"] or L["Unlock window"]) end
+    if self.lockButton then self.lockButton.label:SetText(self.options.locked and L["On"] or L["Off"]) end
 end
 
 function view:ApplyBadgeStyle()
     self.badge.icon:SetTexture(app.iconTexture)
     show(self.badge.icon,self.options.minimizedIcon)
     show(self.badge.label,not self.options.minimizedIcon)
-    self.badgeStyleButton.label:SetText(self.options.minimizedIcon and L["Minimized button: icon"] or L["Minimized button: SNP"])
+    self.badgeStyleButton.label:SetText(self.options.minimizedIcon and L["Icon"] or "SNP")
 end
 
 function view:SaveBounds()
@@ -557,7 +664,7 @@ function view:ApplyTextColor()
     local text,first,last=app.formatting:Color(selection.body,selection.first,selection.last,self.options.textColor)
     if not first then return end
     self.writing=true; self.editor:SetText(text); self.editor:SetCursorPosition(last); self.writing=false
-    app:CommitNoteInput(self.editor)
+    if not app:CommitNoteInput(self.editor,true) then return end
     self.editor:SetFocus(); self.editor:HighlightText(first,last)
     self.colorSelection={page=book:Current(),body=text,first=first,last=last}
 end
@@ -578,10 +685,10 @@ function view:ToggleBullet()
         text=text:sub(1,position).."- "..text:sub(position+1)
         cursor=math.max(position,cursor)+2
         self.options.automaticBullets=true
-        self.bulletButton.label:SetText(L["Automatic bullet lists: on"])
+        self.bulletButton.label:SetText(L["On"])
     end
     self.writing=true; editor:SetText(text); editor:SetCursorPosition(cursor); self.writing=false
-    app:CommitNoteInput(editor)
+    app:CommitNoteInput(editor,true)
     editor:SetFocus()
 end
 
@@ -700,7 +807,7 @@ function view:BuildHeader()
         local button=skin:Button(tools,icon,tip,callback); button:SetPoint("LEFT",offset,0); return button
     end
     self.listButton=left("list",L["All notes"],6,function()
-        self:CloseSearch(); show(self.picker,not self.picker:IsShown())
+        self:CloseSearch(); self:List(); show(self.picker,not self.picker:IsShown())
     end)
     self.previousButton=left("previous",L["Previous note"],30,function() self:Select(book:Neighbor(-1)) end)
     self.nextButton=left("next",L["Next note"],54,function() self:Select(book:Neighbor(1)) end)
@@ -758,7 +865,11 @@ end
 function view:BuildTabs()
     self.rail = CreateFrame("Frame",nil,self.content); self.rail:SetHeight(TAB_HEIGHT)
     skin:Fill(self.rail,skin.colors.rail)
-    local plus=skin:Button(self.rail,"plus",L["New note"],function() self:NewPage() end)
+    local plus=skin:Button(self.rail,"plus",function()
+        return skin:LimitTooltip(L["New note"],book:CanAdd())
+    end,function() self:NewPage() end)
+    plus:SetMotionScriptsWhileDisabled(true)
+    self.newNoteButton=plus
     plus:SetPoint("RIGHT",-4,0)
     self.tabScroll=CreateFrame("ScrollFrame",nil,self.rail)
     self.tabScroll:SetPoint("TOPLEFT"); self.tabScroll:SetHeight(TAB_HEIGHT-1)
@@ -785,6 +896,27 @@ function view:BuildEditor()
     self.editorScroll:SetPoint("BOTTOMRIGHT",-24,20)
     local editor=CreateFrame("EditBox",nil,self.editorScroll)
     self.editor=editor; editor:SetMultiLine(true); editor:SetAutoFocus(false)
+    self.noteMetrics=CreateFrame("Frame",nil,self.content)
+    self.noteMetrics:SetPoint("BOTTOMLEFT",0,0); self.noteMetrics:SetPoint("BOTTOMRIGHT",0,0)
+    self.noteMetrics:SetHeight(18); self.noteMetrics:EnableMouse(true)
+    skin:Fill(self.noteMetrics,skin.colors.rail)
+    self.noteMetricsLabel=skin:Label(self.noteMetrics,"")
+    local face,size,flags=self.noteMetricsLabel:GetFont()
+    self.noteMetricsLabel:SetFont(face,math.max(1,size-1),flags)
+    self.noteMetricsMeasure=skin:Label(self.noteMetrics,""); self.noteMetricsMeasure:Hide()
+    self.noteMetricsMeasure:SetFont(self.noteMetricsLabel:GetFont())
+    self.noteMetricsLabel:SetPoint("LEFT",8,0); self.noteMetricsLabel:SetPoint("RIGHT",-8,0)
+    self.noteMetricsLabel:SetWordWrap(false); self.noteMetricsLabel:SetJustifyH("CENTER"); self.noteMetricsLabel:SetJustifyV("MIDDLE")
+    self.noteMetrics:SetScript("OnEnter",function(frame)
+        GameTooltip:SetOwner(frame,"ANCHOR_TOP")
+        GameTooltip:SetText(string.format(L["Lines: %d · Chars: %d/%d* · %d%%"],self.metricsLines or 0,
+            self.metricsCharacters or 0,app.limits.noteBytes,math.floor(#book:Current().body/app.limits.noteBytes*100)))
+        GameTooltip:AddLine(string.format(L["Up to %d characters per note. The limit is %d bytes; UTF-8 and formatting need additional space. Counts include formatting codes and explicit line breaks, not wrapped lines."],
+            app.limits.noteBytes,app.limits.noteBytes),1,1,1,true)
+        GameTooltip:Show()
+    end)
+    self.noteMetrics:SetScript("OnLeave",function() GameTooltip:Hide() end)
+    self.noteMetrics:SetScript("OnHide",function(frame) if GameTooltip:IsOwned(frame) then GameTooltip:Hide() end end)
     editor:SetFontObject("ChatFontNormal"); editor:SetTextColor(unpack(skin.colors.text))
     editor:SetTextInsets(4,4,4,4); app.platform:Hyperlinks(editor); editor:SetHeight(1)
     self.editorScroll:SetScrollChild(editor)
@@ -799,6 +931,7 @@ function view:BuildEditor()
         if userInput~=false then app:CommitNoteInput(frame) end
     end)
     editor:SetScript("OnMouseDown",function()
+        book:BreakUndoGroup()
         self.textPalette:Hide(); self.colorSelection=nil
         self:CloseSearch(); self.picker:Hide(); self:CommitRename()
     end)
@@ -807,6 +940,7 @@ function view:BuildEditor()
     end)
     editor:SetScript("OnTabPressed",function(frame) frame:Insert("    "); app:CommitNoteInput(frame) end)
     editor:SetScript("OnKeyDown",function(frame,key)
+        if key=="LEFT" or key=="RIGHT" or key=="UP" or key=="DOWN" or key=="HOME" or key=="END" then book:BreakUndoGroup() end
         self.bulletEnter=(key=="ENTER" or key=="NUMPADENTER") and not IsControlKeyDown() and (frame:GetCursorPosition()+1) or nil
         if not IsControlKeyDown() then return end
         if key=="R" then
@@ -830,13 +964,19 @@ function view:BuildEditor()
 end
 
 function view:BuildPopovers()
-    self.picker=CreateFrame("Frame",nil,self.content)
-    self.picker:SetPoint("TOPLEFT",self.header,"BOTTOMLEFT",8,0); self.picker:SetSize(290,240)
+    self.picker=CreateFrame("Frame",nil,UIParent)
+    self.picker:SetPoint("TOPLEFT",self.listButton,"BOTTOMLEFT",0,-4); self.picker:SetSize(268,240)
+    self.picker:SetFrameStrata("DIALOG"); self.picker:SetClampedToScreen(true)
     self.picker:SetFrameLevel(self.header:GetFrameLevel()+20); self.picker:EnableMouse(true)
-    skin:Fill(self.picker,skin.colors.rail); self.picker:Hide()
+    skin:Fill(self.picker,skin.colors.rail)
+    self.pickerOutline=skin:Outline(self.picker); self.picker:Hide()
+    self.picker:SetScript("OnShow",function() self.listButton.active=true;skin:ButtonState(self.listButton) end)
+    self.picker:SetScript("OnHide",function() self.listButton.active=false;skin:ButtonState(self.listButton) end)
     local scroll=skin:ScrollFrame(self.picker)
-    scroll:SetPoint("TOPLEFT",5,-5); scroll:SetPoint("BOTTOMRIGHT",-28,5)
+    self.listScroll=scroll
+    scroll:SetPoint("TOPLEFT",8,-8); scroll:SetPoint("BOTTOMRIGHT",-8,8)
     self.listBody=CreateFrame("Frame",nil,scroll); self.listBody:SetSize(252,1); scroll:SetScrollChild(self.listBody)
+    scroll.contentHeight=function() return self.listBody:GetHeight() end
     self.searchPanel=CreateFrame("Frame",nil,self.header)
     self.searchPanel:SetPoint("TOPLEFT",self.searchButton,"BOTTOMLEFT",0,-8)
     self.searchPanel:SetSize(235,40); self.searchPanel:SetFrameLevel(self.header:GetFrameLevel()+30)
@@ -874,7 +1014,88 @@ function view:BuildPopovers()
     cancel:SetPoint("BOTTOMRIGHT",-12,12)
     skin:Label(cancel,L["Cancel"]):SetPoint("CENTER")
     self.renamePanel:Hide()
-    self.notice=skin:Label(self.content,""); self.notice:SetPoint("TOPRIGHT",self.rail,"BOTTOMRIGHT",-15,-12); self.notice:Hide()
+    self.notice=skin:Label(self.content,"")
+    self.notice:SetPoint("TOPLEFT",self.rail,"BOTTOMLEFT",15,-12)
+    self.notice:SetPoint("TOPRIGHT",self.rail,"BOTTOMRIGHT",-15,-12)
+    self.notice:SetWordWrap(true); self.notice:SetJustifyH("RIGHT"); self.notice:Hide()
+end
+
+local function colorHex(color)
+    return string.format("#%02X%02X%02X",math.floor(color[1]*255+0.5),math.floor(color[2]*255+0.5),math.floor(color[3]*255+0.5))
+end
+
+function view:UpdateSettings()
+    if not self.settingsRows then return end
+    for _,row in ipairs(self.settingsRows) do
+        row.button.label:SetText(row.value())
+        if row.button.colorPreview then
+            app.platform:Color(row.button.colorPreview,row.button.previewColor)
+        end
+    end
+    self:LayoutSettings()
+end
+
+function view:LayoutSettings()
+    if not self.settingsCard or self.settingsLayout then return end
+    self.settingsLayout=true
+    local margin=self.content:GetWidth()<360 and 8 or 24
+    local vertical=self.preferences:GetHeight()<80 and 4 or 16
+    self.settingsScroll:ClearAllPoints()
+    self.settingsScroll:SetPoint("TOPLEFT",margin,-vertical)
+    self.settingsScroll:SetPoint("BOTTOMRIGHT",-margin-16,vertical)
+    local width=math.max(1,math.min(260,self.settingsScroll:GetWidth()))
+    self.settingsCard:SetWidth(width)
+    local y=35
+    for _,entry in ipairs(self.settingsSliders) do
+        -- Measure outside the constrained label so repeated layouts cannot shrink clipped values.
+        self.settingsMeasure:SetFont(entry.amount:GetFont())
+        self.settingsMeasure:SetText(entry.amount:GetText())
+        local amountWidth=math.ceil(self.settingsMeasure:GetStringWidth())+4
+        entry.amount:SetWidth(amountWidth);entry.amount:SetHeight(math.ceil(entry.amount:GetStringHeight()))
+        entry.caption:SetWidth(math.max(1,width-amountWidth-8));entry.caption:SetHeight(0)
+        local height=math.ceil(entry.caption:GetStringHeight())
+        entry.caption:SetHeight(height);entry.caption:ClearAllPoints();entry.caption:SetPoint("TOPLEFT",0,-y)
+        entry.amount:ClearAllPoints();entry.amount:SetPoint("TOPRIGHT",0,-y)
+        entry.control:ClearAllPoints();entry.control:SetPoint("TOPLEFT",0,-y-height-8)
+        entry.control:SetPoint("TOPRIGHT",0,-y-height-8);entry.control:SetHeight(12)
+        y=y+height+38
+    end
+    local buttonWidth=64
+    for _,row in ipairs(self.settingsRows) do
+        local text=row.button.label:GetText()
+        row.button.label:SetWidth(0)
+        for _,value in ipairs(row.values or {text}) do
+            row.button.label:SetText(value)
+            buttonWidth=math.max(buttonWidth,math.ceil(row.button.label:GetStringWidth())+20)
+        end
+        row.button.label:SetText(text)
+    end
+    buttonWidth=math.ceil(buttonWidth*1.1)
+    for _,row in ipairs(self.settingsRows) do
+        row.button:SetSize(buttonWidth,28)
+        row.button.label:SetWidth(buttonWidth-16);row.button.label:SetHeight(math.ceil(row.button.label:GetStringHeight()))
+        local stacked=width<buttonWidth+70
+        row.caption:SetWidth(math.max(1,stacked and width or width-buttonWidth-10));row.caption:SetHeight(0)
+        local labelHeight=math.ceil(row.caption:GetStringHeight())
+        local height=stacked and labelHeight+34 or math.max(28,labelHeight+8)
+        row.caption:SetHeight(labelHeight);row.caption:ClearAllPoints()
+        row.caption:SetPoint("TOPLEFT",0,-y-(stacked and 0 or (height-labelHeight)/2))
+        row.button:ClearAllPoints();row.button:SetPoint("TOPRIGHT",0,-y-(stacked and labelHeight+6 or (height-28)/2))
+        row.top,row.height=y,height
+        y=y+height+8
+    end
+    local about=self.settingsAbout
+    about:SetWidth(width);about:SetHeight(0);about:ClearAllPoints();about:SetPoint("TOPLEFT",0,-y-8)
+    local aboutHeight=math.ceil(about:GetStringHeight());about:SetHeight(aboutHeight)
+    y=y+aboutHeight+24
+    if self.devResetButton then
+        self.devResetButton:ClearAllPoints();self.devResetButton:SetPoint("TOPLEFT",0,-y)
+        self.devResetButton:SetWidth(width);y=y+40
+    end
+    self.settingsCard:SetHeight(y+8)
+    self.settingsScroll:SetVerticalScroll(math.min(self.settingsScroll:GetVerticalScroll(),math.max(0,y+8-self.settingsScroll:GetHeight())))
+    self.settingsScroll:UpdateScrollBar()
+    self.settingsLayout=false
 end
 
 function view:BuildSettings()
@@ -885,12 +1106,16 @@ function view:BuildSettings()
     settingsScroll:SetPoint("TOPLEFT",24,-16); settingsScroll:SetPoint("BOTTOMRIGHT",-30,16)
     local card=CreateFrame("Frame",nil,settingsScroll); card:SetSize(260,505)
     self.settingsCard=card
+    self.settingsRows={};self.settingsSliders={}
+    self.settingsMeasure=skin:Label(card,"");self.settingsMeasure:Hide()
     card.settingsCard=true
     settingsScroll:SetScrollChild(card)
     local title=skin:Label(card,L["Settings"]); title:SetPoint("TOPLEFT",0,0)
     local function slider(caption,value,low,high,offset,callback)
         local label=skin:Label(card,caption); label:SetPoint("TOPLEFT",0,offset)
+        label:SetJustifyH("LEFT");label:SetWordWrap(true);label:SetNonSpaceWrap(true)
         local amount=skin:Label(card,""); amount:SetPoint("TOPRIGHT",0,offset)
+        amount:SetWordWrap(false);amount:SetJustifyH("RIGHT")
         local range=CreateFrame("Slider",nil,card)
         range:SetOrientation("HORIZONTAL"); range:SetPoint("TOPLEFT",0,offset-22); range:SetSize(260,12)
         skin:Fill(range,skin.colors.hover)
@@ -900,7 +1125,9 @@ function view:BuildSettings()
         range:SetValue(value); amount:SetText(math.floor(value*100+0.5).."%")
         range:SetScript("OnValueChanged",function(_,number)
             amount:SetText(math.floor(number*100+0.5).."%"); callback(number)
+            self:LayoutSettings()
         end)
+        self.settingsSliders[#self.settingsSliders+1]={caption=label,amount=amount,control=range}
         return range
     end
     self.opacitySlider=slider(L["Window opacity"],self.options.opacity,0.1,1,-35,function(value)
@@ -913,57 +1140,59 @@ function view:BuildSettings()
         self.options.scale=value; self.root:SetScale(value)
         self.root:ClearAllPoints(); self.root:SetPoint("CENTER",UIParent,"CENTER",self.options.x/value,self.options.y/value)
     end)
-    local minimap=skin:Button(card,nil,nil,function(button)
+    local function setting(caption,value,callback,values)
+        local label=skin:Label(card,caption)
+        label:SetJustifyH("LEFT");label:SetWordWrap(true);label:SetNonSpaceWrap(true)
+        local button=skin:Button(card,nil,nil,function() callback();self:UpdateSettings() end,64)
+        button.label=skin:Label(button,"");button.label:SetPoint("CENTER");button.label:SetJustifyH("CENTER")
+        self.settingsRows[#self.settingsRows+1]={caption=label,button=button,value=value,values=values}
+        return button
+    end
+    local toggles={L["On"],L["Off"]}
+    self.minimapButton=setting(L["Minimap icon"],function() return self.options.minimap and L["On"] or L["Off"] end,function()
         self.options.minimap=not self.options.minimap
         if app.launcher then show(app.launcher,self.options.minimap) end
-        button.label:SetText(self.options.minimap and L["Minimap icon: on"] or L["Minimap icon: off"])
-    end,260)
-    minimap:SetPoint("TOPLEFT",0,-140); minimap.label=skin:Label(minimap,self.options.minimap and L["Minimap icon: on"] or L["Minimap icon: off"])
-    minimap.label:SetPoint("CENTER")
-    self.badgeStyleButton=skin:Button(card,nil,nil,function()
+    end,toggles)
+    self.badgeStyleButton=setting(L["Minimized button"],function() return self.options.minimizedIcon and L["Icon"] or "SNP" end,function()
         self.options.minimizedIcon=not self.options.minimizedIcon; self:ApplyBadgeStyle()
-    end,260)
-    self.badgeStyleButton:SetPoint("TOPLEFT",0,-180)
-    self.badgeStyleButton.label=skin:Label(self.badgeStyleButton,""); self.badgeStyleButton.label:SetPoint("CENTER")
-    self.lockButton=skin:Button(card,nil,nil,function()
+    end,{L["Icon"],"SNP"})
+    self.lockButton=setting(L["Window lock"],function() return self.options.locked and L["On"] or L["Off"] end,function()
         self.options.locked=not self.options.locked; self:ApplyLock()
-    end,260)
-    self.lockButton:SetPoint("TOPLEFT",0,-215)
-    self.lockButton.label=skin:Label(self.lockButton,""); self.lockButton.label:SetPoint("CENTER")
-    self.styleButton=skin:Button(card,nil,nil,function()
+    end,toggles)
+    self.styleButton=setting(L["Style"],function() return self.options.style=="wow" and "WoW" or L["Modern"] end,function()
         if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
         self.options.style=self.options.style == "wow" and "flat" or "wow"
         self:ApplyStyle()
-    end,260)
-    self.styleButton:SetPoint("TOPLEFT",0,-250)
-    self.styleButton.label=skin:Label(self.styleButton,""); self.styleButton.label:SetPoint("CENTER")
-    local background=skin:Button(card,nil,nil,function() self:ChooseColor("backgroundColor",skin.colors.editor) end,244)
-    background:SetPoint("TOPLEFT",16,-285); skin:Label(background,L["Background color"]):SetPoint("CENTER")
-    local accent=skin:Button(card,nil,nil,function() self:ChooseColor("accentColor",skin.colors.blue) end,244)
-    accent:SetPoint("TOPLEFT",16,-320); skin:Label(accent,L["Accent color"]):SetPoint("CENTER")
-    local reset=skin:Button(card,nil,nil,function()
-        if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
-        self.options.style="flat"; self.options.styleColors={flat={},wow={}}
-        self:ApplyStyle()
-    end,260)
-    reset:SetPoint("TOPLEFT",0,-355); skin:Label(reset,L["Reset appearance"]):SetPoint("CENTER")
-    self.bulletButton=skin:Button(card,nil,nil,function(button)
+    end,{"WoW",L["Modern"]})
+    self.backgroundButton=setting(L["Background color"],function() return colorHex(skin.colors.editor) end,function() self:ChooseColor("backgroundColor",skin.colors.editor) end)
+    self.accentButton=setting(L["Accent color"],function() return colorHex(skin.colors.blue) end,function() self:ChooseColor("accentColor",skin.colors.blue) end)
+    local function colorPreview(button,color)
+        local stripe=button:CreateTexture(nil,"OVERLAY")
+        stripe:SetPoint("TOPLEFT",button,"TOPLEFT",0,0)
+        stripe:SetPoint("BOTTOMLEFT",button,"BOTTOMLEFT",0,0)
+        stripe:SetWidth(4)
+        button.colorPreview,button.previewColor=stripe,color
+    end
+    colorPreview(self.backgroundButton,skin.colors.editor)
+    colorPreview(self.accentButton,skin.colors.blue)
+    self.bulletButton=setting(L["Automatic bullet lists"],function() return self.options.automaticBullets and L["On"] or L["Off"] end,function()
         self.options.automaticBullets=not self.options.automaticBullets
-        button.label:SetText(self.options.automaticBullets and L["Automatic bullet lists: on"] or L["Automatic bullet lists: off"])
-    end,260)
-    self.bulletButton:SetPoint("TOPLEFT",0,-395)
-    self.bulletButton.label=skin:Label(self.bulletButton,self.options.automaticBullets and L["Automatic bullet lists: on"] or L["Automatic bullet lists: off"])
-    self.bulletButton.label:SetPoint("CENTER")
-    self.navigationButton=skin:Button(card,nil,nil,function(button)
+    end,toggles)
+    self.navigationButton=setting(L["Previous/next buttons"],function() return self.options.showNoteNavigation and L["On"] or L["Off"] end,function()
         self.options.showNoteNavigation=not self.options.showNoteNavigation
-        button.label:SetText(self.options.showNoteNavigation and L["Previous/next buttons: on"] or L["Previous/next buttons: off"])
         self:Layout()
-    end,260)
-    self.navigationButton:SetPoint("TOPLEFT",0,-435)
-    self.navigationButton.label=skin:Label(self.navigationButton,self.options.showNoteNavigation and L["Previous/next buttons: on"] or L["Previous/next buttons: off"])
-    self.navigationButton.label:SetPoint("CENTER")
+    end,toggles)
+    self.metricsButton=setting(L["Note Footer"],function() return self.options.showNoteMetrics and L["On"] or L["Off"] end,function()
+        self.options.showNoteMetrics=not self.options.showNoteMetrics;self:Layout()
+    end,toggles)
+    self.resetAppearanceButton=setting(L["Appearance"],function() return L["Reset"] end,function()
+        StaticPopup_Show("SIMPLENOTEPAD_RESET_APPEARANCE")
+    end,{L["Reset"]})
+    self.resetAppearanceButton.warning=true;skin:ButtonState(self.resetAppearanceButton)
     local about=skin:Label(card,"SimpleNotepad "..app.version.." "..string.format(L["by %s"],"sAks"),true)
-    about:SetPoint("TOPLEFT",0,-480); about:SetSize(260,16); about:SetJustifyH("CENTER")
+    self.settingsAbout=about;about:SetJustifyH("CENTER");about:SetWordWrap(true);about:SetNonSpaceWrap(true)
+    settingsScroll:HookScript("OnSizeChanged",function() self:LayoutSettings() end)
+    self:UpdateSettings()
     self.preferences:Hide()
 end
 
@@ -984,7 +1213,7 @@ function view:ApplyStyle()
     for _,mark in ipairs(self.bulletGlyph or {}) do app.platform:Color(mark,skin.colors.text) end
     for _,line in ipairs(self.toolbarSeparators or {}) do app.platform:Color(line,skin.colors.text) end
     if self.shareCount then self.shareCount:SetTextColor(unpack(skin.colors.blue)) end
-    if self.styleButton then self.styleButton.label:SetText(self.options.style == "wow" and L["Style: WoW"] or L["Style: modern"]) end
+    self:UpdateSettings()
     if self.editor then self.editor:SetTextColor(unpack(skin.colors.text)) end
     if self.preview then self.preview:SetTextColor(unpack(skin.colors.text)) end
     if self.search then self.search:SetTextColor(unpack(skin.colors.text)) end
@@ -1071,13 +1300,28 @@ function app:BuildWindow()
         if view.mode == "note" then view.editor:SetFocus(); view.editor:SetCursorPosition(#view.editor:GetText()) end
     end)
     view.root:SetScript("OnUpdate",function(_,elapsed) view:Tick(elapsed) end)
-    view.root:SetScript("OnHide",function() view:EndTabDrag() end)
+    view.root:SetScript("OnHide",function() view:EndTabDrag();view.picker:Hide() end)
     StaticPopupDialogs.SIMPLENOTEPAD_DELETE={
         text=L["Permanently delete this note?"],button1=app.forceEnglish and "Yes" or YES,button2=app.forceEnglish and "No" or NO,
         OnAccept=function(_,page)
             view:CommitRename()
             for index,candidate in ipairs(book.data.pages) do if candidate==page then book:Remove(index); break end end
             view:Refresh()
+        end,
+        timeout=0,whileDead=true,hideOnEscape=true,
+    }
+    StaticPopupDialogs.SIMPLENOTEPAD_LIMIT={
+        text="SimpleNotepad\n\n%s",button1=L["Close"],
+        OnShow=function(frame) frame:SetFrameLevel(view.renamePanel:GetFrameLevel()+10) end,
+        timeout=0,whileDead=true,hideOnEscape=true,
+    }
+    StaticPopupDialogs.SIMPLENOTEPAD_RESET_APPEARANCE={
+        text=L["Reset appearance? This selects the Modern style and resets background and accent colors for both styles. Notes and other settings stay unchanged."],
+        button1=L["Reset"],button2=L["Cancel"],
+        OnAccept=function()
+            if ColorPickerFrame and ColorPickerFrame:IsShown() then ColorPickerFrame:Hide() end
+            view.options.style="flat";view.options.styleColors={flat={},wow={}}
+            view:ApplyStyle()
         end,
         timeout=0,whileDead=true,hideOnEscape=true,
     }

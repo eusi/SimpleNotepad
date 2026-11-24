@@ -41,6 +41,7 @@ An in-game notepad for notes, reminders, and useful links.
 - **Previous/next buttons:** Show note navigation in the toolbar; off by default.
 - **Minimap icon:** Show/hide.
 - **Minimized button:** Addon icon or SNP text.
+- **Note Footer:** Show lines, characters, and storage usage below the note.
 
 ## Controls
 
@@ -73,3 +74,12 @@ Both players need SimpleNotepad 0.5.0 or newer and must be in the same party or 
 
 Cheers,
 sAks/eusi
+
+## Limits
+
+- **Notes:** 50 per character, including shared notes and closed tabs. Existing notes are kept.
+- **Text:** 32 KiB per note (~16 pages), 2 MiB per character (~1,000 pages). Formatting and special characters use more space.
+- **Titles:** 128 bytes (up to 128 characters).
+- **Incoming:** Five pending notes, two simultaneous transfers.
+- **Undo:** 20 steps; 1 MiB per note, 8 MiB total. Resets on `/reload` or restart.
+- **Sending:** 35 seconds between sends. Notes over 20 lines or 2 KiB show a time estimate; sending can take longer than five seconds.

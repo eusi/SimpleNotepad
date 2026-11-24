@@ -1,8 +1,70 @@
 local _, app = ...
 local L = app.L
 -- Undo is session-local; only pages and options are persisted in SavedVariables.
-local journal, snapshots = {}, {}
+-- Player limits and pacing live here; the sharing wire format stays unchanged.
+app.limits = {
+    notes=50, titleBytes=128, noteBytes=32768, totalBytes=2097152,
+    undoSteps=20, undoNoteBytes=1048576, undoTotalBytes=8388608,
+    undoGroupGap=0.75, undoGroupMax=5,
+    inbox=5, transfers=2, estimateLines=20, estimateBytes=2048,
+    sendBytesPerSecond=1600, sendBurstBytes=1000, sendPacketsPerTick=2,
+    packetOverhead=40, retryMin=0.25, retryMax=1,
+}
+local limits=app.limits
+local journal, snapshots = {noteLimit = limits.notes}, {}
+local historyClock=0
 app.journal = journal
+
+local function TrimHistory()
+    local total=0
+    for page,track in pairs(snapshots) do
+        local bytes=0
+        for _,body in ipairs(track.values) do bytes=bytes+#body end
+        while #track.values>limits.undoSteps+1 or (bytes>limits.undoNoteBytes and #track.values>1) do
+            -- Never discard the current state while retaining unrelated redo states.
+            local index=track.cursor>1 and 1 or #track.values
+            bytes=bytes-#table.remove(track.values,index)
+            if index==1 then track.cursor=track.cursor-1 end
+        end
+        track.bytes=bytes
+        if bytes>limits.undoNoteBytes then snapshots[page]=nil else total=total+bytes end
+    end
+    while total>limits.undoTotalBytes do
+        local oldest,at
+        for page,track in pairs(snapshots) do
+            if not at or track.used<at then oldest,at=page,track.used end
+        end
+        local track=snapshots[oldest]
+        local index=track.cursor>1 and 1 or #track.values
+        local bytes=#table.remove(track.values,index)
+        track.bytes=track.bytes-bytes; total=total-bytes
+        if index==1 then track.cursor=track.cursor-1 end
+        if #track.values==0 then snapshots[oldest]=nil end
+    end
+end
+
+function journal:TextBytes()
+    local bytes=0
+    for _,page in ipairs(self.data.pages) do bytes=bytes+#(page.body or "") end
+    return bytes
+end
+
+function journal:CheckBody(body,previous)
+    local growth=#body-#(previous or "")
+    if growth>0 and #body>limits.noteBytes then return false,"Text limit: %d KiB per note.",limits.noteBytes/1024 end
+    if growth>0 and self:TextBytes()+growth>limits.totalBytes then return false,"Notebook limit: %d MiB of text.",limits.totalBytes/1048576 end
+    return true
+end
+
+function journal:CheckTitle(name,previous)
+    if #name>limits.titleBytes and #name>#(previous or "") then return false,"Title limit: %d bytes.",limits.titleBytes end
+    return true
+end
+
+function journal:BreakUndoGroup()
+    local track=self.data and snapshots[self:Current()]
+    if track then track.group=nil end
+end
 
 local function Copy(value, seen)
     if type(value) ~= "table" then return value end
@@ -124,6 +186,7 @@ end
 
 function journal:Load(database, account, character, references)
     if database ~= self.data then
+        snapshots={}
         self.account, self.character, self.sharedRefs = account, character, references or {}
     end
     self.data = database
@@ -137,6 +200,7 @@ function journal:Load(database, account, character, references)
     local options=database.options
     options.automaticBullets=options.automaticBullets==true
     options.showNoteNavigation=options.showNoteNavigation==true
+    options.showNoteMetrics=options.showNoteMetrics==true
     if type(options.textColor)~="string" or not options.textColor:match("^%x%x%x%x%x%x$") then options.textColor="ffcc66" end
     if options.style~="wow" then options.style="flat" end
     if type(options.styleColors)~="table" then options.styleColors={} end
@@ -173,36 +237,64 @@ function journal:Current()
     return self.data.pages[self.data.selected]
 end
 
-function journal:Record(body)
+function journal:Record(body,group,cursor)
     local page = self:Current()
-    if page.body == body then return end
+    if page.body == body then return true end
+    local ok,key,value=self:CheckBody(body,page.body)
+    if not ok then return false,key,value end
+    local now=GetTime and GetTime() or 0
     local track = snapshots[page]
     if not track then track = {values = {page.body}, cursor = 1}; snapshots[page] = track end
+    local delta=#body-#page.body
+    local adjacent=cursor and track.lastCursor and (track.lastCursor==cursor-delta or (group=="delete" and track.lastCursor==cursor))
+    local merge=group and group==track.group and adjacent and track.cursor==#track.values
+        and now-track.at<=limits.undoGroupGap and now-track.started<limits.undoGroupMax
     for index = #track.values, track.cursor + 1, -1 do track.values[index] = nil end
-    track.values[#track.values + 1] = body
-    if #track.values > 100 then table.remove(track.values, 1) end
+    if merge then track.values[#track.values]=body else track.values[#track.values+1]=body; track.started=now end
     track.cursor = #track.values
+    historyClock=historyClock+1
+    track.used=historyClock; track.group=group; track.at=now; track.lastCursor=cursor
     page.body = body
+    TrimHistory()
+    return true
 end
 
 function journal:Restore(direction)
     local page = self:Current()
     local track = snapshots[page]
     if not track then return end
-    track.cursor = math.max(1, math.min(#track.values, track.cursor + direction))
+    self:BreakUndoGroup()
+    local destination=math.max(1, math.min(#track.values, track.cursor + direction))
+    -- Previously accepted/legacy text remains recoverable within the history budget.
+    track.cursor = destination
     page.body = track.values[track.cursor]
+    historyClock=historyClock+1;track.used=historyClock
+    return true
 end
 
-function journal:Add(name)
+function journal:CanAdd(body)
+    if #self.data.pages>=limits.notes then return false,"Note limit reached (%d).",limits.notes end
+    return self:CheckBody(body or "","")
+end
+
+function journal:Add(name,body)
+    local ok,key,value=self:CanAdd(body)
+    if not ok then return false,key,value end
+    name=name or string.format(L["Note %d"],#self.data.pages+1)
+    ok,key,value=self:CheckTitle(name)
+    if not ok then return false,key,value end
+    self:BreakUndoGroup()
     local pages = self.data.pages
-    pages[#pages + 1] = {name = name or string.format(L["Note %d"], #pages + 1), body = "", open = true}
+    pages[#pages + 1] = {name = name, body = body or "", open = true}
     self.data.selected = #pages
     self.data.tabOrder[#self.data.tabOrder+1]=#pages
     self:SyncPages()
+    return true
 end
 
 function journal:Select(index)
     if not self.data.pages[index] then return end
+    self:BreakUndoGroup()
     self.data.selected = index
     if not self:TabPosition(index) then self.data.tabOrder[#self.data.tabOrder+1]=index end
     self:Current().open = true
@@ -241,6 +333,8 @@ end
 function journal:Rename(index, name)
     name = name:match("^%s*(.-)%s*$")
     if name == "" or not self.data.pages[index] then return false end
+    local ok,key,value=self:CheckTitle(name,self.data.pages[index].name)
+    if not ok then return false,key,value end
     self.data.pages[index].name = name
     return true
 end
