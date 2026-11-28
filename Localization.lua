@@ -78,44 +78,44 @@ local strings = setmetatable({}, {__index = function(_,key) return key end})
 for index,key in ipairs(keys) do strings[key] = selected and selected[index] or key end
 local extraKeys = {
     "Name for the new note", "Save", "Cancel", "Background color", "Accent color",
-    "Hold, then drag to reorder", "Drag left or right to reorder", "Click to open. Drag to move.",
+    "Hold, then drag to reorder", "Drag left or right to reorder", "Left-click: show/hide notes.", "Right-click: open Settings.",
 }
 local extraTranslations = {
     deDE = {
         "Name der neuen Notiz", "Speichern", "Abbrechen", "Hintergrundfarbe", "Akzentfarbe",
-        "Gedrückt halten, dann zum Sortieren ziehen", "Zum Sortieren nach links oder rechts ziehen", "Klicken zum Öffnen. Ziehen zum Verschieben.",
+        "Gedrückt halten, dann zum Sortieren ziehen", "Zum Sortieren nach links oder rechts ziehen", "Linksklick: Notizen ein-/ausblenden.", "Rechtsklick: Einstellungen öffnen.",
     },
     frFR = {
         "Nom de la nouvelle note", "Enregistrer", "Annuler", "Couleur de fond", "Couleur d’accent",
-        "Maintenir, puis glisser pour réorganiser", "Glisser à gauche ou à droite pour réorganiser", "Cliquer pour ouvrir. Glisser pour déplacer.",
+        "Maintenir, puis glisser pour réorganiser", "Glisser à gauche ou à droite pour réorganiser", "Clic gauche : afficher/masquer les notes.", "Clic droit : ouvrir les paramètres.",
     },
     esES = {
         "Nombre de la nueva nota", "Guardar", "Cancelar", "Color de fondo", "Color de acento",
-        "Mantén pulsado y arrastra para ordenar", "Arrastra a izquierda o derecha para ordenar", "Haz clic para abrir. Arrastra para mover.",
+        "Mantén pulsado y arrastra para ordenar", "Arrastra a izquierda o derecha para ordenar", "Clic izquierdo: mostrar/ocultar notas.", "Clic derecho: abrir ajustes.",
     },
     ptBR = {
         "Nome da nova nota", "Salvar", "Cancelar", "Cor de fundo", "Cor de destaque",
-        "Segure e arraste para reordenar", "Arraste para a esquerda ou direita para reordenar", "Clique para abrir. Arraste para mover.",
+        "Segure e arraste para reordenar", "Arraste para a esquerda ou direita para reordenar", "Clique esquerdo: mostrar/ocultar notas.", "Clique direito: abrir configurações.",
     },
     itIT = {
         "Nome della nuova nota", "Salva", "Annulla", "Colore di sfondo", "Colore di risalto",
-        "Tieni premuto e trascina per riordinare", "Trascina a sinistra o a destra per riordinare", "Clicca per aprire. Trascina per spostare.",
+        "Tieni premuto e trascina per riordinare", "Trascina a sinistra o a destra per riordinare", "Clic sinistro: mostra/nascondi le note.", "Clic destro: apri le impostazioni.",
     },
     ruRU = {
         "Название новой заметки", "Сохранить", "Отмена", "Цвет фона", "Цвет акцента",
-        "Удерживайте и перетащите для сортировки", "Перетащите влево или вправо для сортировки", "Нажмите, чтобы открыть. Перетащите, чтобы переместить.",
+        "Удерживайте и перетащите для сортировки", "Перетащите влево или вправо для сортировки", "ЛКМ: показать/скрыть заметки.", "ПКМ: открыть настройки.",
     },
     koKR = {
         "새 메모 이름", "저장", "취소", "배경색", "강조색",
-        "길게 누른 뒤 끌어서 순서 변경", "왼쪽이나 오른쪽으로 끌어서 순서 변경", "클릭하여 열기. 끌어서 이동.",
+        "길게 누른 뒤 끌어서 순서 변경", "왼쪽이나 오른쪽으로 끌어서 순서 변경", "왼쪽 클릭: 메모 표시/숨기기.", "오른쪽 클릭: 설정 열기.",
     },
     zhCN = {
         "新笔记名称", "保存", "取消", "背景颜色", "强调色",
-        "长按后拖动以排序", "向左或向右拖动以排序", "点击打开，拖动移动。",
+        "长按后拖动以排序", "向左或向右拖动以排序", "左键点击：显示/隐藏笔记。", "右键点击：打开设置。",
     },
     zhTW = {
         "新筆記名稱", "儲存", "取消", "背景顏色", "強調色",
-        "長按後拖曳以排序", "向左或向右拖曳以排序", "點擊開啟，拖曳移動。",
+        "長按後拖曳以排序", "向左或向右拖曳以排序", "左鍵點擊：顯示/隱藏筆記。", "右鍵點擊：開啟設定。",
     },
 }
 extraTranslations.esMX = extraTranslations.esES

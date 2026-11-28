@@ -28,6 +28,7 @@ An in-game notepad for notes, reminders, and useful links.
 - **Movable**, resizable window down to one text line, with saved layout.
 - **Minimize** to a draggable icon button.
 - Optional draggable minimap icon and configurable key bindings.
+- Titan Panel, Bazooka, minimap button collectors and WoW's addon list.
 - Languages: English, German, French, Spanish, Portuguese, Italian, Russian, Korean, and Chinese.
 
 ## Settings
@@ -72,10 +73,9 @@ Both players need SimpleNotepad 0.5.0 or newer and must be in the same party or 
 - Appearance settings remain shared across characters on the same account and client.
 - Saved on logout or `/reload`; undo/redo lasts for the current session.
 
-Cheers,
-sAks/eusi
-
 ## Limits
+
+These limits keep your notes quick to open, edit, and share without slowing down your game.
 
 - **Notes:** 50 per character, including shared notes and closed tabs. Existing notes are kept.
 - **Text:** 32 KiB per note (~16 pages), 2 MiB per character (~1,000 pages). Formatting and special characters use more space.
@@ -83,3 +83,6 @@ sAks/eusi
 - **Incoming:** Five pending notes, two simultaneous transfers.
 - **Undo:** 20 steps; 1 MiB per note, 8 MiB total. Resets on `/reload` or restart.
 - **Sending:** 35 seconds between sends. Notes over 20 lines or 2 KiB show a time estimate; sending can take longer than five seconds.
+
+Cheers,
+sAks/eusi

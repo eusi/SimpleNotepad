@@ -263,7 +263,7 @@ function view:Tabs()
             local button = self.tabButtons[slot]
             if not button then
                 button = skin:Button(self.tabCanvas, nil, nil, function() end)
-                button:SetHeight(TAB_HEIGHT-1)
+                button:SetHeight(TAB_HEIGHT)
                 button.label = skin:Label(button, "")
                 button.label:SetPoint("LEFT", 8, 0); button.label:SetJustifyH("LEFT")
                 button.sharedIcon = skin:Icon(button,"globe")
@@ -302,7 +302,7 @@ function view:Tabs()
             button:SetAlpha(1)
             for _,edge in ipairs(button.sortOutline) do app.platform:Color(edge,skin.colors.blue); show(edge,sorting) end
             button:ClearAllPoints(); button:SetPoint("LEFT", self.tabCanvas,"LEFT",offset,0)
-            skin:Paint(button.fill,active and skin.colors.selected or skin.colors.tab)
+            skin:TabState(button,active)
             app.platform:Color(button.accent,skin.colors.blue)
             local shared=book:IsShared(index)
             show(button.sharedIcon,shared)
@@ -314,7 +314,6 @@ function view:Tabs()
             local tabWidth=nameWidth+16+(count > 1 and 18 or 0)+(shared and 18 or 0)
             button.label:SetWidth(nameWidth)
             button:SetWidth(tabWidth)
-            button.label:SetTextColor(unpack(active and skin.colors.text or skin.colors.muted))
             show(button.accent, active); show(button.close, count > 1)
             button:SetScript("OnClick", function(frame)
                 if frame.suppressClick then frame.suppressClick=nil; return end
@@ -330,7 +329,7 @@ function view:Tabs()
     show(self.settingsTab, self.settingsOpen)
     if self.settingsOpen then
         self.settingsTab:ClearAllPoints(); self.settingsTab:SetPoint("LEFT", self.tabCanvas,"LEFT",offset,0)
-        skin:Paint(self.settingsTab.fill,self.mode == "settings" and skin.colors.selected or skin.colors.tab)
+        skin:TabState(self.settingsTab,self.mode == "settings")
         self.settingsTab.label:SetWidth(0)
         local nameWidth=math.ceil(self.settingsTab.label:GetStringWidth())
         local tabWidth=nameWidth+34
@@ -516,6 +515,26 @@ end
 
 function view:ApplyOpacity()
     self.root:SetAlpha(self.options.opacity*self.fade)
+end
+
+-- Indicate where typing goes without changing keyboard focus or auto-hide behavior.
+function view:UpdateInputFocus(force)
+    if not self.headerFill then return end
+    local focused=not not (self.root:IsShown() and (
+        self.mode=="note" and self.editor:HasFocus()
+        or self.searchPanel:IsShown() and self.search:HasFocus()
+        or self.renamePanel:IsShown() and self.rename:HasFocus()))
+    if self.inputFocused==focused and not force then return end
+    self.inputFocused=focused
+    local toolbar=skin.colors.toolbar
+    local shade=math.max(0.08,math.min(0.18,(toolbar[1]+toolbar[2]+toolbar[3])/3*0.55))
+    if focused then shade=math.max(0.055,shade-0.025) end
+    self.focusHeaderColor=self.focusHeaderColor or {}
+    for index=1,3 do self.focusHeaderColor[index]=shade end
+    local color=self.focusHeaderColor
+    skin:Paint(self.headerFill,color)
+    skin:Paint(self.revealFill,color)
+    for _,button in ipairs(self.toolbarButtons or {}) do skin:ButtonState(button) end
 end
 
 function view:ApplyLock()
@@ -785,8 +804,10 @@ end
 function view:BuildHeader()
     local header = CreateFrame("Frame",nil,self.content)
     self.header = header; header:SetHeight(HEADER_HEIGHT)
+    header.focusOwner=self
     header:SetFrameLevel(self.root:GetFrameLevel()+10)
-    skin:Fill(header,skin.colors.toolbar)
+    -- Keep native stone grain subtle so it cannot conceal the focus color.
+    self.headerFill=skin:Fill(header,skin.colors.toolbar,nil,0.20)
     header:EnableMouse(true); header:RegisterForDrag("LeftButton")
     header:SetScript("OnDragStart",function()
         if not self.animation and not self.options.locked then self.root:StartMoving() end
@@ -795,6 +816,7 @@ function view:BuildHeader()
     self.toolbarScroll=CreateFrame("ScrollFrame",nil,header)
     self.toolbarScroll:SetPoint("TOPLEFT"); self.toolbarScroll:SetHeight(HEADER_HEIGHT)
     self.toolbarCanvas=CreateFrame("Frame",nil,self.toolbarScroll)
+    self.toolbarCanvas.focusOwner=self
     self.toolbarCanvas:SetSize(1,HEADER_HEIGHT)
     self.toolbarScroll:SetScrollChild(self.toolbarCanvas)
     self.toolbarScroll:EnableMouseWheel(true)
@@ -857,29 +879,30 @@ function view:BuildHeader()
     self.reveal = CreateFrame("Button",nil,self.content)
     self.reveal:SetPoint("TOPLEFT"); self.reveal:SetPoint("TOPRIGHT"); self.reveal:SetHeight(5)
     self.reveal:SetFrameLevel(header:GetFrameLevel()+3)
-    skin:Fill(self.reveal,skin.colors.border)
+    self.revealFill=skin:Fill(self.reveal,skin.colors.border,nil,0.20)
     self.reveal:SetScript("OnEnter",function() self.idle = 0 end)
     self.reveal:SetScript("OnClick",function() self.options.autoHide=false; self.autoButton.active=false; self:Layout() end)
 end
 
 function view:BuildTabs()
     self.rail = CreateFrame("Frame",nil,self.content); self.rail:SetHeight(TAB_HEIGHT)
-    skin:Fill(self.rail,skin.colors.rail)
+    skin:Fill(self.rail,skin.colors.tabIdle)
     local plus=skin:Button(self.rail,"plus",function()
         return skin:LimitTooltip(L["New note"],book:CanAdd())
     end,function() self:NewPage() end)
     plus:SetMotionScriptsWhileDisabled(true)
     self.newNoteButton=plus
+    plus.iconColor=skin.colors.tabText
     plus:SetPoint("RIGHT",-4,0)
     self.tabScroll=CreateFrame("ScrollFrame",nil,self.rail)
-    self.tabScroll:SetPoint("TOPLEFT"); self.tabScroll:SetHeight(TAB_HEIGHT-1)
-    self.tabCanvas=CreateFrame("Frame",nil,self.tabScroll); self.tabCanvas:SetSize(1,TAB_HEIGHT-1)
+    self.tabScroll:SetPoint("TOPLEFT"); self.tabScroll:SetHeight(TAB_HEIGHT)
+    self.tabCanvas=CreateFrame("Frame",nil,self.tabScroll); self.tabCanvas:SetSize(1,TAB_HEIGHT)
     self.tabScroll:SetScrollChild(self.tabCanvas); self.tabScroll:EnableMouseWheel(true)
     self.tabScroll:SetScript("OnMouseWheel",function(frame,delta)
         frame:SetHorizontalScroll(math.max(0,math.min(math.max(0,self.tabCanvas:GetWidth()-frame:GetWidth()),frame:GetHorizontalScroll()-delta*80)))
     end)
     self.settingsTab=skin:Button(self.tabCanvas,nil,nil,function() self:Settings() end)
-    self.settingsTab:SetHeight(TAB_HEIGHT-1)
+    self.settingsTab:SetHeight(TAB_HEIGHT)
     local label=skin:Label(self.settingsTab,L["Settings"]); label:SetPoint("LEFT",8,0)
     self.settingsTab.label=label; label:SetJustifyH("LEFT")
     local close=skin:Button(self.settingsTab,"close",L["Close settings"],function()
@@ -1151,7 +1174,7 @@ function view:BuildSettings()
     local toggles={L["On"],L["Off"]}
     self.minimapButton=setting(L["Minimap icon"],function() return self.options.minimap and L["On"] or L["Off"] end,function()
         self.options.minimap=not self.options.minimap
-        if app.launcher then show(app.launcher,self.options.minimap) end
+        app:UpdateLaunchers()
     end,toggles)
     self.badgeStyleButton=setting(L["Minimized button"],function() return self.options.minimizedIcon and L["Icon"] or "SNP" end,function()
         self.options.minimizedIcon=not self.options.minimizedIcon; self:ApplyBadgeStyle()
@@ -1243,6 +1266,7 @@ function view:ApplyStyle()
         end
         self:Layout(); self:Refresh()
     end
+    self:UpdateInputFocus(true)
 end
 
 -- Addon entry points; window construction stays hidden until fully initialized.
@@ -1300,7 +1324,15 @@ function app:BuildWindow()
         if view.mode == "note" then view.editor:SetFocus(); view.editor:SetCursorPosition(#view.editor:GetText()) end
     end)
     view.root:SetScript("OnUpdate",function(_,elapsed) view:Tick(elapsed) end)
-    view.root:SetScript("OnHide",function() view:EndTabDrag();view.picker:Hide() end)
+    view.root:SetScript("OnHide",function()
+        view:EndTabDrag();view.picker:Hide();view:UpdateInputFocus()
+    end)
+    view.root:SetScript("OnShow",function() view:UpdateInputFocus() end)
+    for _,input in ipairs({view.editor,view.search,view.rename}) do
+        input:HookScript("OnEditFocusGained",function() view:UpdateInputFocus() end)
+        input:HookScript("OnEditFocusLost",function() view:UpdateInputFocus() end)
+        input:HookScript("OnHide",function() view:UpdateInputFocus() end)
+    end
     StaticPopupDialogs.SIMPLENOTEPAD_DELETE={
         text=L["Permanently delete this note?"],button1=app.forceEnglish and "Yes" or YES,button2=app.forceEnglish and "No" or NO,
         OnAccept=function(_,page)

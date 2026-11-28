@@ -8,6 +8,91 @@ app.version = metadata and metadata(addonName,"Version") or ""
 -- Both the minimap launcher and the minimized window use this same artwork.
 app.iconTexture = "Interface\\AddOns\\"..addonName.."\\Media\\logo.tga"
 
+-- Share one launcher action across broker bars, minimap collectors and WoW's addon list.
+local launchers={}
+app.launchers=launchers
+function launchers.OnClick(_,button)
+    if button=="RightButton" then
+        local view=app.view
+        if not view.root:IsShown() or view.animation and not view.animation.opening then view:Animate(true,false) end
+        view:Settings()
+    elseif button==nil or button=="LeftButton" then app:Toggle() end
+end
+function launchers.OnTooltipShow(tooltip)
+    tooltip:SetText("SimpleNotepad")
+    tooltip:AddLine(app.L["Left-click: show/hide notes."],1,1,1,true)
+    tooltip:AddLine(app.L["Right-click: open Settings."],1,1,1,true)
+end
+local function RegisterBroker()
+    if launchers.object then return true end
+    local broker=LibStub and LibStub("LibDataBroker-1.1",true)
+    if not broker then return false end
+    launchers.object=broker:NewDataObject(addonName,{
+        type="launcher",label="SimpleNotepad",text=app.L["Show/hide SimpleNotepad"],
+        icon=app.iconTexture,OnClick=launchers.OnClick,OnTooltipShow=launchers.OnTooltipShow,
+    })
+    return launchers.object~=nil
+end
+local function RegisterCompartment()
+    if launchers.compartment then return true end
+    local frame=AddonCompartmentFrame
+    if not frame or type(frame.RegisterAddon)~="function" then return false end
+    local entry={text="SimpleNotepad",icon=app.iconTexture,
+        func=function(_,input)
+            local button=type(input)=="table" and input.buttonName or input
+            launchers.OnClick(nil,type(button)=="string" and button or "LeftButton")
+        end,
+        funcOnEnter=function(button)
+            GameTooltip:SetOwner(button,"ANCHOR_LEFT")
+            launchers.OnTooltipShow(GameTooltip);GameTooltip:Show()
+        end,
+        funcOnLeave=function()GameTooltip:Hide()end,
+    }
+    frame:RegisterAddon(entry);launchers.compartment=entry
+    return true
+end
+local function RegisterMinimap()
+    if launchers.library then return true end
+    local library=LibStub and LibStub("LibDBIcon-1.0",true)
+    if not library or not launchers.object or not app.launcher then return false end
+    local options=app.journal.data.options
+    local saved=options.minimapLauncher
+    if type(saved)~="table" then
+        saved={minimapPos=options.minimapAngle or 225};options.minimapLauncher=saved
+    end
+    saved.hide=not options.minimap;saved.showInCompartment=false
+    library:Register(addonName,launchers.object,saved)
+    local button=library:GetMinimapButton(addonName)
+    if not button then return false end
+    app.launcher:Hide()
+    app.launcher,app.launcherIcon=button,button.icon
+    launchers.library=library
+    return true
+end
+function app:UpdateLaunchers()
+    if not launchers.started then return end
+    RegisterBroker();RegisterCompartment();RegisterMinimap()
+    local enabled=self.journal.data.options.minimap
+    if launchers.library then
+        self.journal.data.options.minimapLauncher.hide=not enabled
+        if enabled then launchers.library:Show(addonName) else launchers.library:Hide(addonName) end
+    elseif self.launcher then self.launcher:SetShown(enabled) end
+    if launchers.listener and launchers.object and launchers.library and (launchers.compartment or launchers.loggedIn) then
+        launchers.listener:UnregisterAllEvents()
+    end
+end
+function app:StartLaunchers()
+    launchers.started=true
+    launchers.listener=CreateFrame("Frame")
+    launchers.listener:RegisterEvent("ADDON_LOADED")
+    launchers.listener:RegisterEvent("PLAYER_LOGIN")
+    launchers.listener:SetScript("OnEvent",function(self,event)
+        if event=="PLAYER_LOGIN" then launchers.loggedIn=true;self:UnregisterEvent("PLAYER_LOGIN") end
+        app:UpdateLaunchers()
+    end)
+    self:UpdateLaunchers()
+end
+
 -- Minimap addons advertise rounded quadrants through GetMinimapShape.
 local minimapCorners={
     ROUND={true,true,true,true}, SQUARE={false,false,false,false},

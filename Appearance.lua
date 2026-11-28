@@ -10,16 +10,19 @@ skin.colors = {
     button = {17/255, 18/255, 22/255}, hover = {32/255, 33/255, 39/255},
     text = {238/255, 238/255, 238/255}, muted = {150/255, 150/255, 156/255},
     blue = {0, 170/255, 1}, active = {21/255, 31/255, 41/255},
+    tabActive = {0.08,0.08,0.08}, tabIdle = {0.16,0.16,0.16},
+    tabText = {1,1,1}, tabMuted = {0.65,0.65,0.65},
 }
 local defaults, fills, labels, fillByTexture, bevels = {}, {}, {}, {}, {}
 local buttons, scrolls, outlines = {}, {}, {}
+local toolbarWhite = {1,1,1}
 for key,color in pairs(skin.colors) do defaults[key]={unpack(color)} end
 
 function skin:Paint(texture,color)
     local fill=fillByTexture[texture]
     if fill then fill.color=color end
     if self.wow and fill then
-        local marble=color == self.colors.editor
+        local marble=color == self.colors.editor or color == self.colors.tabActive
         -- Repeat the material beyond its edges instead of smearing the last pixel.
         texture:SetTexture(marble and "Interface\\FrameGeneral\\UI-Background-Marble" or "Interface\\FrameGeneral\\UI-Background-Rock", "REPEAT", "REPEAT")
         texture:SetHorizTile(true); texture:SetVertTile(true)
@@ -34,7 +37,7 @@ function skin:Paint(texture,color)
             fill.base:SetAllPoints(texture)
         end
         platform:Color(fill.base,color); fill.base:Show()
-        texture:SetAlpha(self.lightBackground and 0.25 or 1)
+        texture:SetAlpha(fill.materialAlpha or (self.lightBackground and 0.25 or 1))
     else
         if fill and fill.base then fill.base:Hide() end
         texture:SetAlpha(1)
@@ -70,6 +73,12 @@ function skin:Configure(options)
         end
     end
     local accent=profile.accentColor or {0,238/255,1}
+    for index=1,3 do
+        self.colors.tabActive[index]=self.colors.editor[index]
+        self.colors.tabIdle[index]=math.min(1,self.colors.editor[index]+0.08)
+        self.colors.tabText[index]=self.colors.text[index]
+        self.colors.tabMuted[index]=self.colors.muted[index]
+    end
     if accent then for index=1,3 do self.colors.blue[index]=accent[index] end end
     for _,fill in ipairs(fills) do self:Paint(fill.texture,fill.color) end
     for _,edge in ipairs(bevels) do edge:SetShown(self.wow) end
@@ -80,10 +89,10 @@ function skin:Configure(options)
 end
 
 -- Reusable controls.
-function skin:Fill(parent, color, layer)
+function skin:Fill(parent, color, layer, materialAlpha)
     local texture = parent:CreateTexture(nil, layer or "BACKGROUND")
     texture:SetAllPoints()
-    local fill={texture=texture,color=color,parent=parent}
+    local fill={texture=texture,color=color,parent=parent,materialAlpha=materialAlpha}
     fills[#fills+1]=fill; fillByTexture[texture]=fill
     self:Paint(texture,color)
     return texture
@@ -153,6 +162,12 @@ function skin:Button(parent, icon, tooltip, callback, width, plain)
         edge:SetShown(self.wow); bevels[#bevels+1]=edge
     end
     if icon then button.icon = self:Icon(button, icon) end
+    button.focusOwner=parent.focusOwner
+    if button.focusOwner then
+        local owner=button.focusOwner
+        owner.toolbarButtons=owner.toolbarButtons or {}
+        owner.toolbarButtons[#owner.toolbarButtons+1]=button
+    end
     buttons[#buttons+1]=button
     button:SetScript("OnEnter", function(self)
         self.tooltipHovered=true; self.hovered=self:IsEnabled()
@@ -175,9 +190,16 @@ function skin:ButtonState(button)
     if button.plain then
         button.fill:Hide()
         local color=button.iconColor or ((button.active or button.hovered) and self.colors.blue or self.colors.text)
+        if button.focusOwner and not button.hovered then
+            color=toolbarWhite
+        elseif button.tabOwner and not button.hovered then
+            color=button.tabOwner.tabActive and self.colors.tabText or self.colors.tabMuted
+        end
         if button.icon then button.icon:SetVertexColor(unpack(color)) end
         if button.glyph then button.glyph:SetTextColor(unpack(color)) end
         for _,part in ipairs(button.iconParts or {}) do part:SetVertexColor(unpack(color)) end
+    elseif button.tabActive~=nil then
+        self:TabState(button,button.tabActive)
     elseif button.settings then
         local color=button.hovered and self.colors.hover or button.active and self.colors.active or self.colors.button
         if not self.wow then
@@ -191,6 +213,13 @@ function skin:ButtonState(button)
         end
         self:Paint(button.fill,color)
     end
+end
+
+function skin:TabState(button,active)
+    button.tabActive=active
+    self:Paint(button.fill,active and self.colors.tabActive or self.colors.tabIdle)
+    button.label:SetTextColor(unpack(active and self.colors.tabText or self.colors.tabMuted))
+    if button.close then button.close.tabOwner=button; self:ButtonState(button.close) end
 end
 
 function skin:Outline(parent)

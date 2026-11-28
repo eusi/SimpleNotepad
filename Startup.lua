@@ -33,8 +33,10 @@ boot:SetScript("OnEvent", function(_, _, name)
     local border=launcher:CreateTexture(nil,"OVERLAY")
     border:SetSize(54,54); border:SetPoint("TOPLEFT")
     border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    local lastWidth,lastHeight,lastShape,lastScale,lastLauncherScale
+    local launcherParent=launcher:GetParent()
+    local lastWidth,lastHeight,lastShape,lastScale,lastLauncherScale,lastParent
     local function position()
+        if launcher:GetParent()~=launcherParent then return end
         local shape=GetMinimapShape and GetMinimapShape() or "ROUND"
         local width,height=Minimap:GetWidth(),Minimap:GetHeight()
         local mapScale,buttonScale=Minimap:GetEffectiveScale(),launcher:GetEffectiveScale()
@@ -43,6 +45,7 @@ boot:SetScript("OnEvent", function(_, _, name)
         local scale=mapScale/buttonScale
         local x,y=app.platform:MinimapOffset(app.journal.data.options.minimapAngle or 225,width*scale,height*scale,shape)
         lastWidth,lastHeight,lastShape,lastScale,lastLauncherScale=width,height,shape,mapScale,buttonScale
+        lastParent=launcherParent
         launcher:ClearAllPoints()
         launcher:SetPoint("CENTER",Minimap,"CENTER",x,y)
     end
@@ -52,13 +55,16 @@ boot:SetScript("OnEvent", function(_, _, name)
         poll=poll+elapsed
         if poll<0.5 then return end
         poll=0
+        local parent=launcher:GetParent()
+        if parent~=launcherParent then lastParent=parent;return end
         local shape=GetMinimapShape and GetMinimapShape() or "ROUND"
-        if lastWidth~=Minimap:GetWidth() or lastHeight~=Minimap:GetHeight() or lastShape~=shape
+        if lastParent~=parent or lastWidth~=Minimap:GetWidth() or lastHeight~=Minimap:GetHeight() or lastShape~=shape
             or lastScale~=Minimap:GetEffectiveScale() or lastLauncherScale~=launcher:GetEffectiveScale() then position() end
     end
     position()
     launcher:SetScript("OnUpdate",watch)
     launcher:RegisterForDrag("LeftButton")
+    launcher:RegisterForClicks("LeftButtonUp","RightButtonUp")
     launcher:SetScript("OnMouseDown",function(button) button.dragged=nil end)
     launcher:SetScript("OnDragStart",function(button)
         button.dragged=true; GameTooltip:Hide()
@@ -70,16 +76,17 @@ boot:SetScript("OnEvent", function(_, _, name)
         end)
     end)
     launcher:SetScript("OnDragStop",function(button) button:SetScript("OnUpdate",watch); position() end)
-    launcher:SetScript("OnClick", function(button)
-        if not button.dragged then app:Toggle() end
+    launcher:SetScript("OnClick", function(button,mouseButton)
+        if not button.dragged then app.launchers.OnClick(button,mouseButton) end
         button.dragged=nil
     end)
     launcher:SetScript("OnEnter",function(button)
-        GameTooltip:SetOwner(button,"ANCHOR_LEFT"); GameTooltip:SetText("SimpleNotepad")
-        GameTooltip:AddLine(L["Click to open. Drag to move."],1,1,1); GameTooltip:Show()
+        GameTooltip:SetOwner(button,"ANCHOR_LEFT")
+        app.launchers.OnTooltipShow(GameTooltip); GameTooltip:Show()
     end)
     launcher:SetScript("OnLeave",function() GameTooltip:Hide() end)
     launcher:SetShown(app.journal.data.options.minimap)
+    app:StartLaunchers()
     SLASH_SIMPLENOTEPAD1 = "/snp"
     SLASH_SIMPLENOTEPAD2 = "/simplenotepad"
     SLASH_SIMPLENOTEPAD3 = "/sn"

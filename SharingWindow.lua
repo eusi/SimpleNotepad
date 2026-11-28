@@ -88,7 +88,7 @@ function view:PlaceSharingTab(offset)
     local badgeWidth=#share.inbox>0 and 18 or 0
     tab:SetWidth(width+34+badgeWidth)
     tab:ClearAllPoints(); tab:SetPoint("LEFT",self.tabCanvas,"LEFT",offset,0)
-    skin:Paint(tab.fill,self.mode=="sharing" and skin.colors.selected or skin.colors.tab)
+    skin:TabState(tab,self.mode=="sharing")
     return width+34+badgeWidth
 end
 
@@ -383,7 +383,7 @@ function app:BuildSharingWindow()
     view.sourceRows={}; view.inboxRows={}
     view.sharingSection="send"; view.shareSelection=nil; view.previewNote=nil
     local tab=skin:Button(view.tabCanvas,nil,nil,function() view:Sharing() end)
-    view.sharingTab=tab; tab:SetHeight(21)
+    view.sharingTab=tab; tab:SetHeight(view.tabCanvas:GetHeight())
     tab.label=label(tab,L["Sharing"]); tab.label:SetPoint("LEFT",8,0)
     tab.count=label(tab,""); tab.count:SetPoint("RIGHT",-22,0)
     local close=skin:Button(tab,"close",L["Close sharing"],function()
